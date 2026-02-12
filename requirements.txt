@@ -1,0 +1,27 @@
+# Python 3.11+ required
+# Core dependencies for gesture-media-interface
+
+# Computer Vision and Hand Tracking
+mediapipe>=0.10.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Audio Processing
+pygame>=2.5.0
+pydub>=0.25.0
+
+# Image Manipulation
+Pillow>=10.0.0
+
+# Threading and Queue Management
+# (built-in with Python 3.11+)
+
+# UI and Rendering
+# Using OpenCV for now, can be extended with other UI frameworks
+
+# Development and Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0
