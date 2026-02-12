@@ -467,7 +467,9 @@ class PyQt6MainWindow(QMainWindow):
         self.status_panel.update_latency(latency_ms)
         self.last_frame_time = current_time
 
-    def _draw_landmarks(self, frame: np.ndarray, landmarks: List[Dict[str, Any]]) -> np.ndarray:
+    def _draw_landmarks(
+        self, frame: np.ndarray, landmarks: List[Dict[str, Any]]
+    ) -> np.ndarray:
         """
         Draw hand landmarks on frame.
 
@@ -523,11 +525,26 @@ class PyQt6MainWindow(QMainWindow):
 
             # Draw connections between landmarks
             connections = [
-                (0, 1), (1, 2), (2, 3), (3, 4),  # Thumb
-                (0, 5), (5, 6), (6, 7), (7, 8),  # Index
-                (0, 9), (9, 10), (10, 11), (11, 12),  # Middle
-                (0, 13), (13, 14), (14, 15), (15, 16),  # Ring
-                (0, 17), (17, 18), (18, 19), (19, 20),  # Pinky
+                (0, 1),
+                (1, 2),
+                (2, 3),
+                (3, 4),  # Thumb
+                (0, 5),
+                (5, 6),
+                (6, 7),
+                (7, 8),  # Index
+                (0, 9),
+                (9, 10),
+                (10, 11),
+                (11, 12),  # Middle
+                (0, 13),
+                (13, 14),
+                (14, 15),
+                (15, 16),  # Ring
+                (0, 17),
+                (17, 18),
+                (18, 19),
+                (19, 20),  # Pinky
             ]
 
             for start_idx, end_idx in connections:
@@ -535,7 +552,9 @@ class PyQt6MainWindow(QMainWindow):
                     start = hand_landmarks[start_idx]
                     end = hand_landmarks[end_idx]
                     color = (0, 255, 0) if not self.debug_mode else (255, 0, 0)
-                    cv2.line(frame, (start["x"], start["y"]), (end["x"], end["y"]), color, 2)
+                    cv2.line(
+                        frame, (start["x"], start["y"]), (end["x"], end["y"]), color, 2
+                    )
 
         return frame
 

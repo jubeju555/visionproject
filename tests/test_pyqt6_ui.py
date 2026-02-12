@@ -57,14 +57,14 @@ class TestCameraWidget:
     def test_display_frame(self, qapp):
         """Test displaying a frame."""
         widget = CameraWidget()
-        
+
         # Create a test frame
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         frame[:, :] = [100, 150, 200]  # BGR color
-        
+
         # Should not raise an exception
         widget.display_frame(frame)
-        
+
         # Verify pixmap was set
         assert widget.pixmap() is not None
 
@@ -122,42 +122,42 @@ class TestControlsPanel:
     def test_debug_toggle(self, qapp):
         """Test debug mode toggle."""
         panel = ControlsPanel()
-        
+
         # Connect signal to a mock
         mock_handler = Mock()
         panel.debug_toggled.connect(mock_handler)
-        
+
         # Click the button
         panel.debug_button.click()
-        
+
         # Verify signal was emitted
         mock_handler.assert_called_once_with(True)
 
     def test_smoothing_toggle(self, qapp):
         """Test smoothing toggle."""
         panel = ControlsPanel()
-        
+
         # Connect signal to a mock
         mock_handler = Mock()
         panel.smoothing_toggled.connect(mock_handler)
-        
+
         # Button starts checked, so first click unchecks
         panel.smoothing_button.click()
-        
+
         # Verify signal was emitted
         mock_handler.assert_called_once_with(False)
 
     def test_reset_button(self, qapp):
         """Test reset button."""
         panel = ControlsPanel()
-        
+
         # Connect signal to a mock
         mock_handler = Mock()
         panel.reset_requested.connect(mock_handler)
-        
+
         # Click the button
         panel.reset_button.click()
-        
+
         # Verify signal was emitted
         mock_handler.assert_called_once()
 
@@ -174,7 +174,7 @@ class TestPyQt6MainWindow:
     def test_window_components(self, qapp, mock_vision_engine):
         """Test main window has all required components."""
         window = PyQt6MainWindow(mock_vision_engine)
-        
+
         # Check components exist
         assert window.camera_widget is not None
         assert window.status_panel is not None
@@ -183,57 +183,58 @@ class TestPyQt6MainWindow:
     def test_debug_toggle_handler(self, qapp, mock_vision_engine):
         """Test debug mode toggle handler."""
         window = PyQt6MainWindow(mock_vision_engine)
-        
+
         # Initially false
         assert window.debug_mode is False
-        
+
         # Toggle debug mode
         window._on_debug_toggled(True)
         assert window.debug_mode is True
-        
+
         window._on_debug_toggled(False)
         assert window.debug_mode is False
 
     def test_smoothing_toggle_handler(self, qapp, mock_vision_engine):
         """Test smoothing toggle handler."""
         window = PyQt6MainWindow(mock_vision_engine)
-        
+
         # Toggle smoothing
         window._on_smoothing_toggled(True)
         mock_vision_engine.set_smoothing.assert_called_with(True)
-        
+
         window._on_smoothing_toggled(False)
         mock_vision_engine.set_smoothing.assert_called_with(False)
 
     def test_draw_landmarks_no_hands(self, qapp, mock_vision_engine):
         """Test drawing landmarks with no hands detected."""
         window = PyQt6MainWindow(mock_vision_engine)
-        
+
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         result = window._draw_landmarks(frame, [])
-        
+
         # Should return unchanged frame
         assert np.array_equal(result, frame)
 
     def test_draw_landmarks_with_hand(self, qapp, mock_vision_engine):
         """Test drawing landmarks with detected hand."""
         window = PyQt6MainWindow(mock_vision_engine)
-        
+
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        
+
         # Create mock hand landmarks with coordinates within frame
-        landmarks = [{
-            'handedness': 'Right',
-            'confidence': 0.95,
-            'landmarks': [
-                {'x': 100 + i * 5, 'y': 100 + i * 5, 'z': 0.0}
-                for i in range(21)
-            ]
-        }]
-        
+        landmarks = [
+            {
+                "handedness": "Right",
+                "confidence": 0.95,
+                "landmarks": [
+                    {"x": 100 + i * 5, "y": 100 + i * 5, "z": 0.0} for i in range(21)
+                ],
+            }
+        ]
+
         # Should not raise an exception
         result = window._draw_landmarks(frame, landmarks)
-        
+
         # Verify result is a numpy array with correct shape
         assert isinstance(result, np.ndarray)
         assert result.shape == (480, 640, 3)
@@ -251,31 +252,31 @@ class TestVisionWorker:
     def test_worker_stop(self, qapp, mock_vision_engine):
         """Test stopping the worker."""
         worker = VisionWorker(mock_vision_engine)
-        
+
         # Start and stop
         worker._running = True
         worker.stop()
-        
+
         assert worker._running is False
 
 
 class TestPyQt6UI:
     """Tests for PyQt6UI class."""
 
-    @patch('src.ui.pyqt6_ui.MediaPipeVisionEngine')
+    @patch("src.ui.pyqt6_ui.MediaPipeVisionEngine")
     def test_ui_initialization(self, mock_engine_class, qapp):
         """Test PyQt6UI initialization."""
         # Setup mock
         mock_engine = Mock(spec=MediaPipeVisionEngine)
         mock_engine.initialize.return_value = True
         mock_engine_class.return_value = mock_engine
-        
+
         # Create UI
         ui = PyQt6UI()
-        
+
         # Initialize
         result = ui.initialize()
-        
+
         assert result is True
         assert ui._initialized is True
         assert ui.main_window is not None
@@ -283,10 +284,10 @@ class TestPyQt6UI:
     def test_ui_initialization_with_engine(self, qapp, mock_vision_engine):
         """Test PyQt6UI initialization with provided engine."""
         ui = PyQt6UI(vision_engine=mock_vision_engine)
-        
+
         # Initialize
         result = ui.initialize()
-        
+
         assert result is True
         assert ui._initialized is True
         assert ui.vision_engine == mock_vision_engine
@@ -295,10 +296,10 @@ class TestPyQt6UI:
         """Test display_mode method."""
         ui = PyQt6UI(vision_engine=mock_vision_engine)
         ui.initialize()
-        
+
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         result = ui.display_mode(frame, "AUDIO")
-        
+
         # Should update status panel
         assert ui.main_window.status_panel.mode_value.text() == "AUDIO"
 
@@ -306,10 +307,10 @@ class TestPyQt6UI:
         """Test display_gesture method."""
         ui = PyQt6UI(vision_engine=mock_vision_engine)
         ui.initialize()
-        
+
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         result = ui.display_gesture(frame, "Wave")
-        
+
         # Should update status panel
         assert ui.main_window.status_panel.gesture_value.text() == "Wave"
 
@@ -317,10 +318,10 @@ class TestPyQt6UI:
         """Test cleanup method."""
         ui = PyQt6UI(vision_engine=mock_vision_engine)
         ui.initialize()
-        
+
         # Cleanup
         ui.cleanup()
-        
+
         # Verify engine cleanup was called
         mock_vision_engine.cleanup.assert_called_once()
 
