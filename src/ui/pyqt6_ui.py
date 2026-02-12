@@ -35,6 +35,8 @@ from src.gesture.gesture_recognition_engine import (
     GestureRecognitionEngine,
     GestureEvent,
 )
+from src.core.state_manager import StateManager
+from src.core.mode_router import ApplicationMode
 import queue
 
 logger = logging.getLogger(__name__)
@@ -413,6 +415,13 @@ class PyQt6MainWindow(QMainWindow):
             history_size=10,
         )
         self.gesture_worker: Optional[GestureWorker] = None
+        
+        # Create mode router
+        self.mode_router = StateManager(mode_switch_duration=2.0)
+        self.mode_router.initialize()
+        
+        # Register mode change callback
+        self.mode_router.register_mode_change_callback(self._on_mode_changed)
 
         # FPS tracking
         self.frame_count = 0
@@ -455,6 +464,8 @@ class PyQt6MainWindow(QMainWindow):
 
         # Status Panel
         self.status_panel = StatusPanel()
+        # Initialize with current mode
+        self.status_panel.update_mode(self.mode_router.get_mode().value.upper())
         right_layout.addWidget(self.status_panel)
 
         # Controls Panel
@@ -691,6 +702,21 @@ class PyQt6MainWindow(QMainWindow):
             f"({gesture_event.confidence_score:.2f}) "
             f"from {gesture_event.hand_id} hand"
         )
+        
+        # Route gesture through mode router
+        gesture_data = {
+            'hand_id': gesture_event.hand_id,
+            'confidence': gesture_event.confidence_score,
+            'timestamp': gesture_event.timestamp,
+            'gesture_type': gesture_event.gesture_type,
+        }
+        
+        # Add additional data if present
+        if gesture_event.additional_data:
+            gesture_data.update(gesture_event.additional_data)
+        
+        # Route gesture to mode router (non-blocking)
+        self.mode_router.route_gesture(gesture_event.gesture_name, gesture_data)
 
     @pyqtSlot(str)
     def _on_error(self, error_msg: str):
@@ -713,14 +739,32 @@ class PyQt6MainWindow(QMainWindow):
     def _on_reset_requested(self):
         """Handle reset request."""
         logger.info("System reset requested")
-        # TODO: Implement system state reset
-        self.status_panel.update_mode("RESET")
-        QTimer.singleShot(1000, lambda: self.status_panel.update_mode("IDLE"))
+        # Reset to NEUTRAL mode
+        self.mode_router.set_mode(ApplicationMode.NEUTRAL)
+        self.status_panel.update_mode(ApplicationMode.NEUTRAL.value.upper())
+    
+    def _on_mode_changed(self, new_mode: ApplicationMode):
+        """
+        Handle mode change from mode router.
+        
+        This callback is called from the mode router when mode changes.
+        
+        Args:
+            new_mode: The new application mode
+        """
+        logger.info(f"Mode changed to: {new_mode.value}")
+        # Update UI to show new mode (use QTimer to ensure UI thread safety)
+        QTimer.singleShot(0, lambda: self.status_panel.update_mode(new_mode.value.upper()))
 
     def closeEvent(self, event):
         """Handle window close event."""
         logger.info("Window closing, cleaning up...")
         self.stop_vision_engine()
+        
+        # Clean up mode router
+        if self.mode_router:
+            self.mode_router.cleanup()
+        
         event.accept()
 
 

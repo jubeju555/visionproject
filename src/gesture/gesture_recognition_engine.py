@@ -189,10 +189,14 @@ class GestureRecognitionEngine:
                 
                 # Recognize gestures for each hand
                 events = []
+                static_gestures_by_hand = {}
                 
                 for hand_idx, hand_data in enumerate(landmarks):
                     # Classify static gesture
                     static_gesture, static_confidence = self._classify_static_gesture(hand_data)
+                    
+                    hand_id = hand_data.get('handedness', 'Unknown').lower()
+                    static_gestures_by_hand[hand_id] = (static_gesture, static_confidence)
                     
                     # Create event for static gesture
                     if static_gesture != StaticGesture.UNKNOWN:
@@ -200,8 +204,28 @@ class GestureRecognitionEngine:
                             gesture_name=static_gesture.value,
                             confidence_score=static_confidence,
                             timestamp=timestamp,
-                            hand_id=hand_data.get('handedness', 'Unknown').lower(),
+                            hand_id=hand_id,
                             gesture_type='static'
+                        )
+                        events.append(event)
+                
+                # Check for both hands showing open palm (for mode switching)
+                if len(landmarks) == 2:
+                    both_open = all(
+                        gesture == StaticGesture.OPEN_PALM
+                        for gesture, _ in static_gestures_by_hand.values()
+                    )
+                    if both_open:
+                        # Calculate average confidence
+                        avg_confidence = sum(conf for _, conf in static_gestures_by_hand.values()) / 2
+                        # Emit special event for both palms open
+                        event = GestureEvent(
+                            gesture_name="open_palm",
+                            confidence_score=avg_confidence,
+                            timestamp=timestamp,
+                            hand_id="both",
+                            gesture_type='static',
+                            additional_data={'both_hands': True}
                         )
                         events.append(event)
                 

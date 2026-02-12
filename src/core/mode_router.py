@@ -12,10 +12,9 @@ from enum import Enum
 
 class ApplicationMode(Enum):
     """Enumeration of application modes."""
-    IDLE = "idle"
-    AUDIO = "audio"
-    IMAGE = "image"
-    SETTINGS = "settings"
+    NEUTRAL = "neutral"
+    AUDIO_CONTROL = "audio_control"
+    IMAGE_EDITING = "image_editing"
 
 
 class ModeRouter(ABC):
