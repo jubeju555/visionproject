@@ -13,13 +13,23 @@ from . import vision
 from . import gesture
 from . import audio
 from . import image
-from . import ui
 
-__all__ = [
-    'core',
-    'vision',
-    'gesture',
-    'audio',
-    'image',
-    'ui',
-]
+# Import UI module only if PyQt6 is available
+try:
+    from . import ui
+    __all__ = [
+        'core',
+        'vision',
+        'gesture',
+        'audio',
+        'image',
+        'ui',
+    ]
+except ImportError:
+    __all__ = [
+        'core',
+        'vision',
+        'gesture',
+        'audio',
+        'image',
+    ]
