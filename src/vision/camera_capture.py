@@ -24,7 +24,6 @@ class CameraCapture(VisionEngine):
         Args:
             camera_id: Camera device ID (default: 0)
         """
-        super().__init__()
         self.camera_id = camera_id
         self._frame = None
         self._running = False

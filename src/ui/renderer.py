@@ -23,7 +23,6 @@ class UIRenderer(AppUI):
         Args:
             window_name: Name of the display window
         """
-        super().__init__()
         self.window_name = window_name
         self._initialized = False
     

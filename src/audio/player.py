@@ -17,7 +17,6 @@ class AudioPlayer(AudioController):
     
     def __init__(self):
         """Initialize audio player."""
-        super().__init__()
         self._current_file = None
         self._playlist = []
         self._current_index = 0

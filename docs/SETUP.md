@@ -95,7 +95,7 @@ mypy src/
 
 ## Architecture
 
-See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system design.
 
 ## Next Steps
 

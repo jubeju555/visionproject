@@ -18,7 +18,6 @@ class ImageManipulator(ImageEditor):
     
     def __init__(self):
         """Initialize image editor."""
-        super().__init__()
         self._current_image = None
         self._original_image = None
         self._history = []

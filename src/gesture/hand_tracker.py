@@ -18,7 +18,6 @@ class HandTracker(GestureEngine):
     
     def __init__(self):
         """Initialize hand tracker."""
-        super().__init__()
         self._hands = None
         self._current_landmarks = None
     

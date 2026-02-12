@@ -19,7 +19,6 @@ class StateManager(ModeRouter):
     
     def __init__(self):
         """Initialize state manager."""
-        super().__init__()
         self._current_mode = ApplicationMode.IDLE
         self._event_queue = queue.Queue()
         self._handlers = {}
