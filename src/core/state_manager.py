@@ -88,7 +88,8 @@ class StateManager(ModeRouter):
         with self._lock:
             if callback not in self._mode_change_callbacks:
                 self._mode_change_callbacks.append(callback)
-                logger.debug(f"Registered mode change callback: {callback.__name__}")
+                callback_name = getattr(callback, '__name__', repr(callback))
+                logger.debug(f"Registered mode change callback: {callback_name}")
     
     def _notify_mode_change(self, new_mode: ApplicationMode) -> None:
         """
