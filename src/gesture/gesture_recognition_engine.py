@@ -67,6 +67,7 @@ class GestureRecognitionEngine:
         history_size: int = 10,
         velocity_threshold: float = 0.05,
         circular_threshold: float = 0.3,
+        performance_monitor: Optional[Any] = None,
     ):
         """
         Initialize Gesture Recognition Engine.
@@ -77,12 +78,14 @@ class GestureRecognitionEngine:
             history_size: Number of frames to keep for motion analysis
             velocity_threshold: Threshold for detecting significant motion
             circular_threshold: Threshold for detecting circular motion
+            performance_monitor: Optional PerformanceMonitor instance
         """
         self.input_queue = input_queue
         self.max_queue_size = max_queue_size
         self.history_size = history_size
         self.velocity_threshold = velocity_threshold
         self.circular_threshold = circular_threshold
+        self.performance_monitor = performance_monitor
         
         # Output queue for gesture events
         self._event_queue: queue.Queue = queue.Queue(maxsize=max_queue_size)
@@ -176,6 +179,9 @@ class GestureRecognitionEngine:
                     
                 if vision_data is None:
                     continue
+                
+                # Start timing gesture recognition
+                recognition_start = time.time()
                     
                 # Extract landmarks
                 landmarks = getattr(vision_data, 'landmarks', [])
@@ -247,6 +253,22 @@ class GestureRecognitionEngine:
                         )
                         events.append(event)
                 
+                # Track recognition time
+                if self.performance_monitor:
+                    self.performance_monitor.end_stage('gesture_recognition', recognition_start)
+                    
+                    # Update queue metrics
+                    self.performance_monitor.update_queue_size(
+                        'gesture_input_queue',
+                        self.input_queue.qsize(),
+                        10  # Approximate capacity
+                    )
+                    self.performance_monitor.update_queue_size(
+                        'gesture_output_queue',
+                        self._event_queue.qsize(),
+                        self.max_queue_size
+                    )
+                
                 # Emit events
                 for event in events:
                     self._emit_event(event)
@@ -279,12 +301,18 @@ class GestureRecognitionEngine:
         # Update latest gesture
         with self._lock:
             self._latest_gesture = event
+        
+        # Record end-to-end latency if performance monitor available
+        if self.performance_monitor and hasattr(event, 'timestamp'):
+            self.performance_monitor.record_e2e_latency(event.timestamp)
             
         # Try to add to queue
         try:
             self._event_queue.put_nowait(event)
         except queue.Full:
             # Drop oldest event if queue is full
+            if self.performance_monitor:
+                self.performance_monitor.record_dropped_frame('gesture_recognition')
             try:
                 self._event_queue.get_nowait()
                 self._event_queue.put_nowait(event)

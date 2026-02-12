@@ -12,6 +12,8 @@ from .audio_controller import AudioController, PlaybackState
 from .image_editor import ImageEditor, ImageOperation
 from .app_ui import AppUI
 from .state_manager import StateManager
+from .performance_monitor import PerformanceMonitor
+from .shutdown_handler import ShutdownHandler, get_shutdown_handler, register_cleanup, trigger_shutdown, is_shutdown_requested, wait_for_shutdown
 
 __all__ = [
     'VisionEngine',
@@ -24,4 +26,11 @@ __all__ = [
     'ImageOperation',
     'AppUI',
     'StateManager',
+    'PerformanceMonitor',
+    'ShutdownHandler',
+    'get_shutdown_handler',
+    'register_cleanup',
+    'trigger_shutdown',
+    'is_shutdown_requested',
+    'wait_for_shutdown',
 ]

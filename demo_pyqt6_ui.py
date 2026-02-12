@@ -7,6 +7,7 @@ This script demonstrates the PyQt6 UI system with:
 - Real-time status updates
 - Interactive controls
 - Thread-safe signal/slot communication
+- Performance monitoring and metrics
 
 Press Ctrl+C or close the window to exit.
 """
@@ -14,6 +15,8 @@ Press Ctrl+C or close the window to exit.
 import sys
 import logging
 from src.ui.pyqt6_ui import PyQt6UI
+from src.core.performance_monitor import PerformanceMonitor
+from src.core.shutdown_handler import get_shutdown_handler, register_cleanup
 
 # Configure logging
 logging.basicConfig(
@@ -24,11 +27,18 @@ logger = logging.getLogger(__name__)
 
 def main():
     """Main demo function."""
-    logger.info("Starting PyQt6 UI Demo")
+    logger.info("Starting PyQt6 UI Demo with Performance Monitoring")
 
     try:
-        # Create PyQt6 UI
-        ui = PyQt6UI()
+        # Create performance monitor
+        perf_monitor = PerformanceMonitor()
+        logger.info("Performance monitor initialized")
+        
+        # Get shutdown handler
+        shutdown_handler = get_shutdown_handler()
+        
+        # Create PyQt6 UI with performance monitor
+        ui = PyQt6UI(performance_monitor=perf_monitor)
 
         # Initialize
         if not ui.initialize():
@@ -36,11 +46,15 @@ def main():
             return 1
 
         logger.info("PyQt6 UI initialized successfully")
+        
+        # Register cleanup callbacks
+        register_cleanup(ui.cleanup, name="PyQt6UI_cleanup")
+        register_cleanup(perf_monitor.log_summary, name="PerformanceMonitor_summary")
 
         # Run the UI (blocks until window is closed)
         ui.run()
 
-        # Cleanup
+        # Cleanup (will also be called by shutdown handler)
         ui.cleanup()
 
         logger.info("Demo finished")

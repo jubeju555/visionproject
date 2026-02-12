@@ -286,6 +286,29 @@ class StatusPanel(QGroupBox):
         self.hands_value.setFont(value_font)
         layout.addWidget(hands_label)
         layout.addWidget(self.hands_value)
+        
+        # Separator
+        layout.addWidget(self._create_separator())
+        
+        # Performance Metrics Section
+        perf_label = QLabel("Performance Metrics:")
+        perf_label.setFont(label_font)
+        layout.addWidget(perf_label)
+        
+        # End-to-End Latency
+        self.e2e_latency = QLabel("E2E Latency: -- ms")
+        self.e2e_latency.setFont(QFont("Monospace", 9))
+        layout.addWidget(self.e2e_latency)
+        
+        # Dropped Frames
+        self.dropped_frames = QLabel("Dropped: 0")
+        self.dropped_frames.setFont(QFont("Monospace", 9))
+        layout.addWidget(self.dropped_frames)
+        
+        # Queue Status
+        self.queue_status = QLabel("Queue: --")
+        self.queue_status.setFont(QFont("Monospace", 9))
+        layout.addWidget(self.queue_status)
 
         # Add stretch to push everything to top
         layout.addStretch()
@@ -319,6 +342,12 @@ class StatusPanel(QGroupBox):
     def update_hands(self, count: int):
         """Update hands detected count."""
         self.hands_value.setText(str(count))
+    
+    def update_performance_metrics(self, e2e_latency: float, dropped_frames: int, queue_status: str):
+        """Update performance metrics display."""
+        self.e2e_latency.setText(f"E2E Latency: {e2e_latency:.1f} ms")
+        self.dropped_frames.setText(f"Dropped: {dropped_frames}")
+        self.queue_status.setText(f"Queue: {queue_status}")
 
 
 class ControlsPanel(QGroupBox):
@@ -396,16 +425,18 @@ class PyQt6MainWindow(QMainWindow):
     and controls for interaction.
     """
 
-    def __init__(self, vision_engine: MediaPipeVisionEngine):
+    def __init__(self, vision_engine: MediaPipeVisionEngine, performance_monitor=None):
         """
         Initialize main window.
 
         Args:
             vision_engine: VisionEngine instance
+            performance_monitor: Optional PerformanceMonitor instance
         """
         super().__init__()
         self.vision_engine = vision_engine
         self.vision_worker: Optional[VisionWorker] = None
+        self.performance_monitor = performance_monitor
         
         # Create gesture recognition engine
         self.vision_to_gesture_queue = queue.Queue(maxsize=10)
@@ -413,6 +444,7 @@ class PyQt6MainWindow(QMainWindow):
             input_queue=self.vision_to_gesture_queue,
             max_queue_size=10,
             history_size=10,
+            performance_monitor=performance_monitor,
         )
         self.gesture_worker: Optional[GestureWorker] = None
         
@@ -435,6 +467,12 @@ class PyQt6MainWindow(QMainWindow):
         # Latest gesture
         self.latest_gesture: Optional[str] = None
         self.latest_gesture_confidence: float = 0.0
+        
+        # Performance metrics update timer
+        if self.performance_monitor:
+            self.perf_timer = QTimer()
+            self.perf_timer.timeout.connect(self._update_performance_metrics)
+            self.perf_timer.start(1000)  # Update every second
 
         # Setup UI
         self._setup_ui()
@@ -683,6 +721,44 @@ class PyQt6MainWindow(QMainWindow):
             self.current_fps = 30 / elapsed
             self.fps_start_time = time.time()
             self.status_panel.update_fps(self.current_fps)
+    
+    def _update_performance_metrics(self):
+        """Update performance metrics display from performance monitor."""
+        if not self.performance_monitor:
+            return
+        
+        try:
+            # Get metrics summary
+            summary = self.performance_monitor.get_metrics_summary()
+            
+            # Update E2E latency
+            e2e_latency = summary['e2e_latency']['avg_ms']
+            
+            # Calculate total dropped frames
+            total_dropped = sum(
+                stage['dropped_frames'] 
+                for stage in summary['stages'].values()
+            )
+            
+            # Format queue status with better name mapping
+            queue_name_map = {
+                'vision_output_queue': 'V:Out',
+                'vision_input_queue': 'V:In',
+                'gesture_input_queue': 'G:In',
+                'gesture_output_queue': 'G:Out',
+            }
+            
+            queue_info = []
+            for name, metrics in summary['queues'].items():
+                short_name = queue_name_map.get(name, name[:6])  # Use mapping or truncate
+                queue_info.append(f"{short_name}:{metrics['size']}/{metrics['capacity']}")
+            queue_status = ", ".join(queue_info) if queue_info else "N/A"
+            
+            # Update status panel
+            self.status_panel.update_performance_metrics(e2e_latency, total_dropped, queue_status)
+            
+        except Exception as e:
+            logger.debug(f"Error updating performance metrics: {e}")
 
     @pyqtSlot(object)
     def _on_gesture_recognized(self, gesture_event: GestureEvent):
@@ -776,17 +852,19 @@ class PyQt6UI(AppUI):
     and non-blocking integration with VisionEngine.
     """
 
-    def __init__(self, vision_engine: Optional[MediaPipeVisionEngine] = None):
+    def __init__(self, vision_engine: Optional[MediaPipeVisionEngine] = None, performance_monitor=None):
         """
         Initialize PyQt6 UI.
 
         Args:
             vision_engine: Optional VisionEngine instance
+            performance_monitor: Optional PerformanceMonitor instance
         """
         super().__init__()
         self.app: Optional[QApplication] = None
         self.main_window: Optional[PyQt6MainWindow] = None
         self.vision_engine = vision_engine
+        self.performance_monitor = performance_monitor
         self._initialized = False
 
     def initialize(self) -> bool:
@@ -815,6 +893,7 @@ class PyQt6UI(AppUI):
                     enable_smoothing=True,
                     smoothing_factor=0.3,
                     max_num_hands=2,
+                    performance_monitor=self.performance_monitor,
                 )
 
                 if not self.vision_engine.initialize():
@@ -822,7 +901,7 @@ class PyQt6UI(AppUI):
                     return False
 
             # Create main window
-            self.main_window = PyQt6MainWindow(self.vision_engine)
+            self.main_window = PyQt6MainWindow(self.vision_engine, self.performance_monitor)
 
             self._initialized = True
             logger.info("PyQt6 UI initialized successfully")
