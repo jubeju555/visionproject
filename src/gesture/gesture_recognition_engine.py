@@ -198,6 +198,9 @@ class GestureRecognitionEngine:
                     hand_id = hand_data.get('handedness', 'Unknown').lower()
                     static_gestures_by_hand[hand_id] = (static_gesture, static_confidence)
                     
+                    # Extract additional data for continuous controls
+                    additional_data = self._extract_continuous_control_data(hand_data)
+                    
                     # Create event for static gesture
                     if static_gesture != StaticGesture.UNKNOWN:
                         event = GestureEvent(
@@ -205,7 +208,8 @@ class GestureRecognitionEngine:
                             confidence_score=static_confidence,
                             timestamp=timestamp,
                             hand_id=hand_id,
-                            gesture_type='static'
+                            gesture_type='static',
+                            additional_data=additional_data
                         )
                         events.append(event)
                 
@@ -673,3 +677,41 @@ class GestureRecognitionEngine:
         angle_deg = math.degrees(angle_rad)
         
         return angle_deg
+    
+    def _extract_continuous_control_data(self, hand_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract continuous control data from hand landmarks.
+        
+        Extracts:
+        - pinch_distance: Distance between thumb tip and index tip (for volume)
+        - vertical_position: Vertical position of hand (0.0 = top, 1.0 = bottom) (for tempo)
+        - horizontal_position: Horizontal position of hand (0.0 = left, 1.0 = right) (for pitch)
+        
+        Args:
+            hand_data: Dictionary containing hand landmarks
+            
+        Returns:
+            Dictionary with continuous control data
+        """
+        landmarks = hand_data.get('landmarks_normalized', [])
+        if len(landmarks) != 21:
+            return {}
+        
+        result = {}
+        
+        try:
+            # Calculate pinch distance (thumb tip to index tip)
+            thumb_tip = landmarks[4]
+            index_tip = landmarks[8]
+            pinch_distance = self._calculate_distance(thumb_tip, index_tip)
+            result['pinch_distance'] = pinch_distance
+            
+            # Calculate hand position (use wrist as reference)
+            wrist = landmarks[0]
+            result['vertical_position'] = wrist.get('y', 0.5)  # Default to center if missing
+            result['horizontal_position'] = wrist.get('x', 0.5)  # Default to center if missing
+        except (KeyError, IndexError, TypeError) as e:
+            logger.debug(f"Error extracting continuous control data: {e}")
+            return {}
+        
+        return result
