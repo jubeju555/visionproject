@@ -105,7 +105,8 @@ class StateManager(ModeRouter):
             try:
                 callback(new_mode)
             except Exception as e:
-                logger.error(f"Error in mode change callback {callback.__name__}: {e}", exc_info=True)
+                callback_name = getattr(callback, '__name__', repr(callback))
+                logger.error(f"Error in mode change callback {callback_name}: {e}", exc_info=True)
     
     def route_gesture(self, gesture: str, data: Optional[Dict[str, Any]] = None) -> None:
         """

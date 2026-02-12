@@ -254,8 +254,19 @@ class TestStateManager:
         # Dispatch some events
         router.dispatch_event({"gesture": "test"})
         
+        # Verify queue has items before cleanup
+        assert not router._event_queue.empty()
+        
         # Cleanup
         router.cleanup()
+        
+        # Verify queue is cleared
+        assert router._event_queue.empty()
+        
+        # Verify handlers and callbacks are cleared
+        with router._lock:
+            assert len(router._handlers) == 0
+            assert len(router._mode_change_callbacks) == 0
         
         # Verify cleanup worked (no errors on re-cleanup)
         router.cleanup()
