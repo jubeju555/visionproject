@@ -518,6 +518,11 @@ class GestureRecognitionEngine:
         
         # Check if distances are relatively consistent (circular path)
         avg_distance = sum(distances) / len(distances)
+        
+        # Guard against division by zero
+        if avg_distance == 0:
+            return False, 0.0
+            
         variance = sum((d - avg_distance)**2 for d in distances) / len(distances)
         
         # Low variance indicates circular motion

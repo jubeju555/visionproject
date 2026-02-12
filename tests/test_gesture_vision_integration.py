@@ -216,11 +216,15 @@ class TestGestureVisionIntegration:
         gesture_engine.stop()
         
         # Validate dynamic gesture was detected
-        if dynamic_event:
-            print(f"Dynamic gesture detected: {dynamic_event.gesture_name} ({dynamic_event.confidence_score:.2f})")
-            assert dynamic_event.gesture_type == "dynamic"
-        else:
-            print("Note: Dynamic gesture detection requires more frames or adjustment of thresholds")
+        # Note: Dynamic gesture detection is timing-sensitive and may not always
+        # trigger in a test environment, but we should at least receive some events
+        assert dynamic_event is not None, (
+            "Expected at least one gesture event. "
+            "Dynamic gesture detection may require more frames or threshold adjustment."
+        )
+        
+        print(f"Dynamic gesture detected: {dynamic_event.gesture_name} ({dynamic_event.confidence_score:.2f})")
+        assert dynamic_event.gesture_type == "dynamic", "Expected a dynamic gesture"
 
 
 if __name__ == "__main__":
