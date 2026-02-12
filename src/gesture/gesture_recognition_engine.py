@@ -699,15 +699,19 @@ class GestureRecognitionEngine:
         
         result = {}
         
-        # Calculate pinch distance (thumb tip to index tip)
-        thumb_tip = landmarks[4]
-        index_tip = landmarks[8]
-        pinch_distance = self._calculate_distance(thumb_tip, index_tip)
-        result['pinch_distance'] = pinch_distance
-        
-        # Calculate hand position (use wrist as reference)
-        wrist = landmarks[0]
-        result['vertical_position'] = wrist['y']  # 0.0 = top, 1.0 = bottom
-        result['horizontal_position'] = wrist['x']  # 0.0 = left, 1.0 = right
+        try:
+            # Calculate pinch distance (thumb tip to index tip)
+            thumb_tip = landmarks[4]
+            index_tip = landmarks[8]
+            pinch_distance = self._calculate_distance(thumb_tip, index_tip)
+            result['pinch_distance'] = pinch_distance
+            
+            # Calculate hand position (use wrist as reference)
+            wrist = landmarks[0]
+            result['vertical_position'] = wrist.get('y', 0.5)  # Default to center if missing
+            result['horizontal_position'] = wrist.get('x', 0.5)  # Default to center if missing
+        except (KeyError, IndexError, TypeError) as e:
+            logger.debug(f"Error extracting continuous control data: {e}")
+            return {}
         
         return result

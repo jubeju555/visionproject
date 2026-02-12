@@ -19,6 +19,12 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+# Constants for continuous control mappings
+VOLUME_PINCH_SCALE = 5.0  # Scale factor for pinch distance to volume
+TEMPO_MIN_OFFSET = 0.5  # Minimum tempo offset from normal (1.0)
+TEMPO_RANGE = 1.5  # Range of tempo control (0.5 to 2.0)
+PITCH_SEMITONE_RANGE = 24.0  # Total pitch range in semitones (-12 to +12)
+
 
 class AudioCommand(Enum):
     """Audio control commands."""
@@ -182,7 +188,7 @@ class AudioControlModule:
         
         # Normalize: assume pinch_distance is in range [0.0, 0.2] for normalized coords
         # Map to volume [0.0, 1.0]
-        volume = min(1.0, max(0.0, pinch_distance * 5.0 * self._volume_sensitivity))
+        volume = min(1.0, max(0.0, pinch_distance * VOLUME_PINCH_SCALE * self._volume_sensitivity))
         
         with self._lock:
             self._state.volume = volume
@@ -212,7 +218,7 @@ class AudioControlModule:
         vertical_pos = data['vertical_position']
         
         # Invert: lower y value (top) = higher tempo
-        tempo = 0.5 + (1.0 - vertical_pos) * 1.5 * self._tempo_sensitivity
+        tempo = TEMPO_MIN_OFFSET + (1.0 - vertical_pos) * TEMPO_RANGE * self._tempo_sensitivity
         tempo = min(2.0, max(0.5, tempo))
         
         with self._lock:
@@ -243,7 +249,7 @@ class AudioControlModule:
         horizontal_pos = data['horizontal_position']
         
         # Map 0.0-1.0 to -12 to +12 semitones
-        pitch = (horizontal_pos - 0.5) * 24.0 * self._pitch_sensitivity
+        pitch = (horizontal_pos - 0.5) * PITCH_SEMITONE_RANGE * self._pitch_sensitivity
         pitch = min(12.0, max(-12.0, pitch))
         
         with self._lock:

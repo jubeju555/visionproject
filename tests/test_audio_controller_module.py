@@ -106,7 +106,7 @@ class TestAudioControlModule:
         assert module.get_tempo() < 1.0
         
         # Test mid position = normal tempo
-        module.handle_tempo_control({'vertical_position': 0.33})
+        module.handle_tempo_control({'vertical_position': 0.33})  # 0.33 = upper third
         tempo = module.get_tempo()
         assert 0.8 <= tempo <= 1.6
         
