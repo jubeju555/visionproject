@@ -374,10 +374,18 @@ class TestMediaPipeVisionEngine:
         assert frame.shape == (480, 640, 3)
 
 
+def _check_camera_available():
+    """Helper function to safely check if camera is available."""
+    cap = cv2.VideoCapture(0)
+    is_available = cap.isOpened()
+    cap.release()
+    return is_available
+
+
 class TestVisionEngineIntegration:
     """Integration tests for vision engine (these may be skipped if no camera available)."""
 
-    @pytest.mark.skipif(not cv2.VideoCapture(0).isOpened(), reason="No camera available")
+    @pytest.mark.skipif(not _check_camera_available(), reason="No camera available")
     def test_real_camera_initialization(self):
         """Test initialization with real camera (if available)."""
         engine = MediaPipeVisionEngine(camera_id=0)

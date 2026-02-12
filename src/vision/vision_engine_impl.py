@@ -124,6 +124,8 @@ class MediaPipeVisionEngine(VisionEngine):
             logger.info(f"Initializing Vision Engine with camera {self.camera_id}")
 
             # Initialize MediaPipe Hands
+            # static_image_mode=False enables video mode for better tracking performance
+            # across sequential frames rather than treating each frame independently
             self._mp_hands = mp.solutions.hands
             self._hands = self._mp_hands.Hands(
                 static_image_mode=False,
@@ -393,6 +395,16 @@ class MediaPipeVisionEngine(VisionEngine):
                 return self._output_queue.get(block=True, timeout=timeout)
         except queue.Empty:
             return None
+
+    def set_smoothing(self, enabled: bool) -> None:
+        """
+        Enable or disable landmark smoothing (thread-safe).
+
+        Args:
+            enabled: True to enable smoothing, False to disable
+        """
+        with self._lock:
+            self.enable_smoothing = enabled
 
     def is_running(self) -> bool:
         """

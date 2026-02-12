@@ -194,9 +194,10 @@ def main():
                 logger.info("Quit requested")
                 break
             elif key == ord("s"):
-                # Toggle smoothing
-                engine.enable_smoothing = not engine.enable_smoothing
-                logger.info(f"Smoothing: {'enabled' if engine.enable_smoothing else 'disabled'}")
+                # Toggle smoothing (thread-safe)
+                current = engine.enable_smoothing
+                engine.set_smoothing(not current)
+                logger.info(f"Smoothing: {'enabled' if not current else 'disabled'}")
 
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
