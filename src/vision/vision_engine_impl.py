@@ -15,6 +15,7 @@ This module provides the complete implementation of VisionEngine with:
 import threading
 import queue
 import logging
+import time
 from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
 import cv2
@@ -68,6 +69,7 @@ class MediaPipeVisionEngine(VisionEngine):
         max_num_hands: int = 2,
         min_detection_confidence: float = 0.5,
         min_tracking_confidence: float = 0.5,
+        performance_monitor: Optional[Any] = None,
     ):
         """
         Initialize the Vision Engine.
@@ -81,6 +83,7 @@ class MediaPipeVisionEngine(VisionEngine):
             max_num_hands: Maximum number of hands to detect (1 or 2)
             min_detection_confidence: Minimum confidence for hand detection
             min_tracking_confidence: Minimum confidence for hand tracking
+            performance_monitor: Optional PerformanceMonitor instance
         """
         super().__init__()
         self.camera_id = camera_id
@@ -91,6 +94,7 @@ class MediaPipeVisionEngine(VisionEngine):
         self.max_num_hands = max_num_hands
         self.min_detection_confidence = min_detection_confidence
         self.min_tracking_confidence = min_tracking_confidence
+        self.performance_monitor = performance_monitor
 
         # Threading components
         self._capture_thread: Optional[threading.Thread] = None
@@ -202,18 +206,30 @@ class MediaPipeVisionEngine(VisionEngine):
         """
         logger.info("Vision Engine capture loop started")
         frame_count = 0
+        
+        # Calculate target frame time for FPS limiting
+        target_frame_time = 1.0 / self.fps if self.fps > 0 else 0.0
 
         try:
             while self._running:
+                loop_start_time = time.time()
+                
                 # Capture frame
+                capture_start = time.time()
                 ret, frame = self._capture.read()
                 if not ret:
                     logger.warning("Failed to read frame from camera")
                     continue
 
                 frame_count += 1
+                
+                # Track capture time
+                if self.performance_monitor:
+                    capture_time_ms = (time.time() - capture_start) * 1000
+                    self.performance_monitor.end_stage('vision_capture', capture_start)
 
                 # Convert BGR to RGB (MediaPipe requirement)
+                processing_start = time.time()
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
                 # Process with MediaPipe Hands
@@ -225,17 +241,22 @@ class MediaPipeVisionEngine(VisionEngine):
                 # Apply smoothing if enabled
                 if self.enable_smoothing and landmarks:
                     landmarks = self._apply_smoothing(landmarks)
+                
+                # Track processing time
+                if self.performance_monitor:
+                    self.performance_monitor.end_stage('vision_processing', processing_start)
 
                 # Update latest frame (thread-safe)
                 with self._lock:
                     self._latest_frame = frame.copy()
 
                 # Create structured data
+                frame_timestamp = time.time()
                 vision_data = VisionData(
                     frame=frame,
                     frame_rgb=frame_rgb,
                     landmarks=landmarks,
-                    timestamp=cv2.getTickCount() / cv2.getTickFrequency(),
+                    timestamp=frame_timestamp,
                 )
 
                 # Push to queue (non-blocking)
@@ -243,15 +264,30 @@ class MediaPipeVisionEngine(VisionEngine):
                     self._output_queue.put_nowait(vision_data)
                 except queue.Full:
                     # Drop oldest frame if queue is full
+                    if self.performance_monitor:
+                        self.performance_monitor.record_dropped_frame('vision_capture')
                     try:
                         self._output_queue.get_nowait()
                         self._output_queue.put_nowait(vision_data)
                     except (queue.Empty, queue.Full):
                         pass
+                
+                # Update queue metrics
+                if self.performance_monitor:
+                    self.performance_monitor.update_queue_size(
+                        'vision_output_queue',
+                        self._output_queue.qsize(),
+                        self.max_queue_size
+                    )
+                    self.performance_monitor.increment_frame_count()
 
-                # Rate limiting to achieve target FPS
-                if self.fps > 0:
-                    cv2.waitKey(max(1, int(1000 / self.fps)))
+                # Rate limiting to achieve target FPS (optimized)
+                if target_frame_time > 0:
+                    elapsed = time.time() - loop_start_time
+                    sleep_time = target_frame_time - elapsed
+                    if sleep_time > 0:
+                        # Use time.sleep instead of cv2.waitKey for more precise timing
+                        time.sleep(sleep_time)
 
         except Exception as e:
             logger.error(f"Error in capture loop: {e}", exc_info=True)
