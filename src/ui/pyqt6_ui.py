@@ -31,6 +31,11 @@ from PyQt6.QtGui import QImage, QPixmap, QFont
 
 from src.core.app_ui import AppUI
 from src.vision.vision_engine_impl import MediaPipeVisionEngine, VisionData
+from src.gesture.gesture_recognition_engine import (
+    GestureRecognitionEngine,
+    GestureEvent,
+)
+import queue
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +86,55 @@ class VisionWorker(QThread):
     def stop(self):
         """Stop the worker thread."""
         self._running = False
+
+
+class GestureWorker(QThread):
+    """
+    Worker thread for GestureRecognitionEngine.
+
+    This thread runs the GestureRecognitionEngine and emits signals
+    when new gestures are recognized.
+    """
+
+    # Signal emitted when new gesture is recognized
+    gesture_recognized = pyqtSignal(object)  # GestureEvent
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, gesture_engine: GestureRecognitionEngine):
+        """
+        Initialize gesture worker.
+
+        Args:
+            gesture_engine: GestureRecognitionEngine instance
+        """
+        super().__init__()
+        self.gesture_engine = gesture_engine
+        self._running = False
+
+    def run(self):
+        """Main worker thread loop."""
+        logger.info("Gesture worker thread started")
+        self._running = True
+
+        try:
+            while self._running:
+                # Get gesture events with timeout
+                gesture_event = self.gesture_engine.get_event(timeout=0.1)
+
+                if gesture_event:
+                    # Emit signal with gesture event
+                    self.gesture_recognized.emit(gesture_event)
+
+        except Exception as e:
+            logger.error(f"Error in gesture worker: {e}", exc_info=True)
+            self.error_occurred.emit(str(e))
+        finally:
+            logger.info("Gesture worker thread stopped")
+
+    def stop(self):
+        """Stop the worker thread."""
+        self._running = False
+
 
 
 class CameraWidget(QLabel):
@@ -350,6 +404,15 @@ class PyQt6MainWindow(QMainWindow):
         super().__init__()
         self.vision_engine = vision_engine
         self.vision_worker: Optional[VisionWorker] = None
+        
+        # Create gesture recognition engine
+        self.vision_to_gesture_queue = queue.Queue(maxsize=10)
+        self.gesture_engine = GestureRecognitionEngine(
+            input_queue=self.vision_to_gesture_queue,
+            max_queue_size=10,
+            history_size=10,
+        )
+        self.gesture_worker: Optional[GestureWorker] = None
 
         # FPS tracking
         self.frame_count = 0
@@ -359,6 +422,10 @@ class PyQt6MainWindow(QMainWindow):
 
         # Debug mode
         self.debug_mode = False
+        
+        # Latest gesture
+        self.latest_gesture: Optional[str] = None
+        self.latest_gesture_confidence: float = 0.0
 
         # Setup UI
         self._setup_ui()
@@ -411,19 +478,40 @@ class PyQt6MainWindow(QMainWindow):
         # Start vision engine capture
         self.vision_engine.start_capture()
 
-        # Create and start worker thread
+        # Create and start vision worker thread
         self.vision_worker = VisionWorker(self.vision_engine)
         self.vision_worker.vision_data_ready.connect(self._on_vision_data)
         self.vision_worker.error_occurred.connect(self._on_error)
         self.vision_worker.start()
 
         logger.info("Vision worker thread started")
+        
+        # Start gesture recognition engine
+        logger.info("Starting gesture recognition engine")
+        self.gesture_engine.start()
+        
+        # Create and start gesture worker thread
+        self.gesture_worker = GestureWorker(self.gesture_engine)
+        self.gesture_worker.gesture_recognized.connect(self._on_gesture_recognized)
+        self.gesture_worker.error_occurred.connect(self._on_error)
+        self.gesture_worker.start()
+        
+        logger.info("Gesture worker thread started")
 
     def stop_vision_engine(self):
         """Stop the vision engine and worker thread."""
         logger.info("Stopping vision engine in UI")
+        
+        # Stop gesture worker thread
+        if self.gesture_worker:
+            self.gesture_worker.stop()
+            self.gesture_worker.wait(2000)  # Wait up to 2 seconds
+        
+        # Stop gesture recognition engine
+        if self.gesture_engine:
+            self.gesture_engine.stop()
 
-        # Stop worker thread
+        # Stop vision worker thread
         if self.vision_worker:
             self.vision_worker.stop()
             self.vision_worker.wait(2000)  # Wait up to 2 seconds
@@ -431,7 +519,7 @@ class PyQt6MainWindow(QMainWindow):
         # Stop vision engine
         self.vision_engine.stop_capture()
 
-        logger.info("Vision engine stopped")
+        logger.info("Vision engine and gesture engine stopped")
 
     @pyqtSlot(object)
     def _on_vision_data(self, vision_data: VisionData):
@@ -441,6 +529,17 @@ class PyQt6MainWindow(QMainWindow):
         Args:
             vision_data: VisionData from VisionEngine
         """
+        # Feed vision data to gesture engine
+        try:
+            self.vision_to_gesture_queue.put_nowait(vision_data)
+        except queue.Full:
+            # Drop oldest data if queue is full
+            try:
+                self.vision_to_gesture_queue.get_nowait()
+                self.vision_to_gesture_queue.put_nowait(vision_data)
+            except (queue.Empty, queue.Full):
+                pass
+        
         # Draw landmarks on frame
         frame = vision_data.frame.copy()
         frame = self._draw_landmarks(frame, vision_data.landmarks)
@@ -452,9 +551,14 @@ class PyQt6MainWindow(QMainWindow):
         hand_count = len(vision_data.landmarks)
         self.status_panel.update_hands(hand_count)
 
-        # Update gesture info (stubbed)
-        if hand_count > 0:
-            self.status_panel.update_gesture("Detected", 0.85)
+        # Update gesture info with latest recognized gesture
+        if self.latest_gesture:
+            self.status_panel.update_gesture(
+                self.latest_gesture, 
+                self.latest_gesture_confidence
+            )
+        elif hand_count > 0:
+            self.status_panel.update_gesture("Processing...", 0.0)
         else:
             self.status_panel.update_gesture("None", 0.0)
 
@@ -569,10 +673,29 @@ class PyQt6MainWindow(QMainWindow):
             self.fps_start_time = time.time()
             self.status_panel.update_fps(self.current_fps)
 
+    @pyqtSlot(object)
+    def _on_gesture_recognized(self, gesture_event: GestureEvent):
+        """
+        Handle gesture recognition from worker thread.
+        
+        Args:
+            gesture_event: GestureEvent from GestureRecognitionEngine
+        """
+        # Update latest gesture
+        self.latest_gesture = gesture_event.gesture_name
+        self.latest_gesture_confidence = gesture_event.confidence_score
+        
+        # Log gesture recognition
+        logger.info(
+            f"Gesture recognized: {gesture_event.gesture_name} "
+            f"({gesture_event.confidence_score:.2f}) "
+            f"from {gesture_event.hand_id} hand"
+        )
+
     @pyqtSlot(str)
     def _on_error(self, error_msg: str):
         """Handle error from worker thread."""
-        logger.error(f"Error from vision worker: {error_msg}")
+        logger.error(f"Error from worker: {error_msg}")
 
     @pyqtSlot(bool)
     def _on_debug_toggled(self, enabled: bool):
