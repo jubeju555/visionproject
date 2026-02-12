@@ -4,6 +4,9 @@
 
 This document describes the PyQt6-based UI framework implementation for the gesture-media-interface project.
 
+![PyQt6 UI Screenshot](https://github.com/user-attachments/assets/53ac3f1d-a1b2-446e-a726-6bfcf913a651)
+*Screenshot showing the PyQt6 UI with mock camera feed, hand landmarks, and status displays*
+
 ## Architecture
 
 The PyQt6 UI system follows a modern, thread-safe architecture that ensures:
