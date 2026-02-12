@@ -3,7 +3,8 @@
 Main entry point for Gesture Media Interface application.
 
 This module initializes and wires together all components of the
-gesture-controlled multimedia system.
+gesture-controlled multimedia system with performance monitoring
+and graceful shutdown.
 """
 
 import sys
@@ -20,6 +21,9 @@ from src.core import (
     AppUI,
     StateManager,
     ApplicationMode,
+    PerformanceMonitor,
+    get_shutdown_handler,
+    register_cleanup,
 )
 from src.vision import CameraCapture
 from src.gesture import HandTracker
@@ -40,12 +44,20 @@ class GestureMediaInterface:
     """
     Main application class for Gesture Media Interface.
     
-    Coordinates all subsystems and manages the application lifecycle.
+    Coordinates all subsystems and manages the application lifecycle
+    with performance monitoring and graceful shutdown.
     """
     
     def __init__(self):
         """Initialize the application."""
         logger.info("Initializing Gesture Media Interface...")
+        
+        # Performance monitoring
+        self.performance_monitor = PerformanceMonitor()
+        logger.info("Performance monitor initialized")
+        
+        # Get shutdown handler
+        self.shutdown_handler = get_shutdown_handler()
         
         # Initialize subsystem components
         self.vision_engine: Optional[VisionEngine] = None
@@ -199,6 +211,11 @@ class GestureMediaInterface:
             logger.info("Cleaning up vision engine...")
             self.vision_engine.cleanup()
         
+        # Log performance summary
+        if self.performance_monitor:
+            logger.info("Logging performance summary...")
+            self.performance_monitor.log_summary()
+        
         logger.info("Shutdown complete")
 
 
@@ -213,6 +230,9 @@ def main() -> int:
         # Create application instance
         app = GestureMediaInterface()
         
+        # Register shutdown callback
+        register_cleanup(app.shutdown, name="GestureMediaInterface_shutdown")
+        
         # Initialize all subsystems
         if not app.initialize():
             logger.error("Failed to initialize application")
@@ -223,6 +243,9 @@ def main() -> int:
         
         return 0
         
+    except KeyboardInterrupt:
+        logger.info("Application interrupted by user")
+        return 0
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
         return 1
