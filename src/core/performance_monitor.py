@@ -16,7 +16,7 @@ Tracks:
 
 import time
 import logging
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 from dataclasses import dataclass, field
 from collections import deque
 from threading import Lock
@@ -183,7 +183,7 @@ class PerformanceMonitor:
         with self._lock:
             self.total_frames += 1
     
-    def get_metrics_summary(self) -> Dict[str, any]:
+    def get_metrics_summary(self) -> Dict[str, Any]:
         """
         Get a summary of all performance metrics.
         

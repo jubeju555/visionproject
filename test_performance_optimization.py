@@ -52,7 +52,8 @@ def test_performance_monitor():
     
     # Record E2E latency
     for i in range(20):
-        pm.record_e2e_latency(time.time() - 0.045)  # ~45ms latency
+        start_timestamp = time.time() - 0.045  # Simulate event 45ms ago
+        pm.record_e2e_latency(start_timestamp)
     
     # Get metrics
     summary = pm.get_metrics_summary()

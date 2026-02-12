@@ -740,10 +740,17 @@ class PyQt6MainWindow(QMainWindow):
                 for stage in summary['stages'].values()
             )
             
-            # Format queue status
+            # Format queue status with better name mapping
+            queue_name_map = {
+                'vision_output_queue': 'V:Out',
+                'vision_input_queue': 'V:In',
+                'gesture_input_queue': 'G:In',
+                'gesture_output_queue': 'G:Out',
+            }
+            
             queue_info = []
             for name, metrics in summary['queues'].items():
-                short_name = name.replace('_queue', '').replace('vision_', 'V:').replace('gesture_', 'G:')
+                short_name = queue_name_map.get(name, name[:6])  # Use mapping or truncate
                 queue_info.append(f"{short_name}:{metrics['size']}/{metrics['capacity']}")
             queue_status = ", ".join(queue_info) if queue_info else "N/A"
             
