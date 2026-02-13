@@ -100,6 +100,7 @@ class GestureRecognitionEngine:
         
         # Latest gesture state
         self._latest_gesture: Optional[GestureEvent] = None
+        self._min_static_confidence = 0.55
         
     def start(self) -> None:
         """Start the gesture recognition thread."""
@@ -358,7 +359,8 @@ class GestureRecognitionEngine:
         elif extended_fingers == 3:
             return StaticGesture.THREE_FINGERS, 0.85
         elif extended_fingers >= 4:
-            return StaticGesture.OPEN_PALM, 0.9
+            confidence = 0.8 + (extended_fingers - 4) * 0.1
+            return StaticGesture.OPEN_PALM, min(0.95, confidence)
             
         return StaticGesture.UNKNOWN, 0.0
         
@@ -379,8 +381,8 @@ class GestureRecognitionEngine:
         # Calculate distance
         distance = self._calculate_distance(thumb_tip, index_tip)
         
-        # Pinch threshold (normalized coordinates)
-        pinch_threshold = 0.05
+        scale = self._hand_scale(landmarks)
+        pinch_threshold = max(0.03, scale * 0.35)
         
         if distance < pinch_threshold:
             # Confidence based on how close they are
@@ -402,6 +404,9 @@ class GestureRecognitionEngine:
         # Check if all fingertips are curled (close to palm)
         wrist = landmarks[0]
         fingertips = [landmarks[4], landmarks[8], landmarks[12], landmarks[16], landmarks[20]]
+
+        scale = self._hand_scale(landmarks)
+        curl_threshold = max(0.18, scale * 1.1)
         
         curled_count = 0
         for tip in fingertips:
@@ -409,7 +414,7 @@ class GestureRecognitionEngine:
             dist = self._calculate_distance(tip, wrist)
             
             # If fingertip is close to wrist, it's curled
-            if dist < 0.3:  # Threshold for curled finger
+            if dist < curl_threshold:  # Threshold for curled finger
                 curled_count += 1
                 
         # Fist if at least 4 fingers are curled
@@ -445,12 +450,15 @@ class GestureRecognitionEngine:
         finger_tips = [8, 12, 16, 20]
         finger_pips = [6, 10, 14, 18]
         
+        scale = self._hand_scale(landmarks)
+        extension_threshold = max(0.02, scale * 0.25)
+
         for tip_idx, pip_idx in zip(finger_tips, finger_pips):
             tip = landmarks[tip_idx]
             pip = landmarks[pip_idx]
             
             # Finger is extended if tip is above (lower y value) the PIP joint
-            if tip['y'] < pip['y'] - 0.05:  # Threshold for extension
+            if tip['y'] < pip['y'] - extension_threshold:
                 extended += 1
                 
         return extended
@@ -540,6 +548,14 @@ class GestureRecognitionEngine:
         vy = current_wrist['y'] - previous_wrist['y']
         
         return (vx, vy)
+
+    def _hand_scale(self, landmarks: List[Dict[str, Any]]) -> float:
+        """Estimate hand scale using wrist to middle MCP distance."""
+        if len(landmarks) < 10:
+            return 0.1
+        wrist = landmarks[0]
+        middle_mcp = landmarks[9]
+        return self._calculate_distance(wrist, middle_mcp)
         
     def _is_circular_motion(self) -> Tuple[bool, float]:
         """

@@ -38,6 +38,10 @@ class StateManager(ModeRouter):
         # Mode switching detection
         self._mode_switch_duration = mode_switch_duration
         self._both_palms_open_start: Optional[float] = None
+        self._left_palm_time: Optional[float] = None
+        self._right_palm_time: Optional[float] = None
+        self._both_palm_window = 0.35
+        self._min_mode_switch_confidence = 0.6
         self._mode_change_callbacks: List[Callable[[ApplicationMode], None]] = []
     
     def initialize(self) -> bool:
@@ -159,16 +163,25 @@ class StateManager(ModeRouter):
         # Check if this is an open palm gesture
         if gesture != "open_palm":
             self._both_palms_open_start = None
+            self._left_palm_time = None
+            self._right_palm_time = None
             return False
         
         # Check if we have data about both hands
         if not data:
             self._both_palms_open_start = None
+            self._left_palm_time = None
+            self._right_palm_time = None
             return False
         
         # Look for both hands in data
         # Data can contain hand_id or we need to track multiple hands
         hand_id = data.get('hand_id', '')
+        confidence = data.get('confidence', 1.0)
+
+        if confidence < self._min_mode_switch_confidence:
+            self._both_palms_open_start = None
+            return False
         
         # For simplicity, we'll check if the gesture indicates "both" hands
         # or if we receive the gesture and it's marked as both-hands gesture
@@ -188,6 +201,30 @@ class StateManager(ModeRouter):
                 self._both_palms_open_start = None
                 self._cycle_mode()
                 return True
+        elif hand_id in ('left', 'right'):
+            current_time = time.time()
+            if hand_id == 'left':
+                self._left_palm_time = current_time
+            else:
+                self._right_palm_time = current_time
+
+            if self._left_palm_time and self._right_palm_time:
+                if abs(self._left_palm_time - self._right_palm_time) <= self._both_palm_window:
+                    if self._both_palms_open_start is None:
+                        self._both_palms_open_start = current_time
+                        logger.debug("Both palms open detected - starting mode switch timer")
+                        return False
+
+                    elapsed = current_time - self._both_palms_open_start
+                    if elapsed >= self._mode_switch_duration:
+                        logger.info(
+                            f"Mode switch gesture detected (both palms open for {elapsed:.1f}s)"
+                        )
+                        self._both_palms_open_start = None
+                        self._cycle_mode()
+                        return True
+                else:
+                    self._both_palms_open_start = None
         else:
             # Not both hands, reset timer
             self._both_palms_open_start = None
