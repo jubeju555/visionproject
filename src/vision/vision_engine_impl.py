@@ -16,6 +16,7 @@ import threading
 import queue
 import logging
 import time
+import os
 from typing import Optional, Dict, Any, List, Tuple
 import numpy as np
 import cv2
@@ -125,6 +126,12 @@ class MediaPipeVisionEngine(VisionEngine):
             bool: True if initialization successful
         """
         try:
+            if self.camera_id == -1:
+                self.camera_id = self.select_best_camera_id()
+                if self.camera_id is None:
+                    logger.error("No available camera devices found")
+                    return False
+
             logger.info(f"Initializing Vision Engine with camera {self.camera_id}")
 
             # Initialize MediaPipe Hands
@@ -139,7 +146,8 @@ class MediaPipeVisionEngine(VisionEngine):
             )
 
             # Initialize camera
-            self._capture = cv2.VideoCapture(self.camera_id)
+            backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
+            self._capture = cv2.VideoCapture(self.camera_id, backend)
             if not self._capture.isOpened():
                 logger.error(f"Failed to open camera {self.camera_id}")
                 return False
@@ -147,6 +155,7 @@ class MediaPipeVisionEngine(VisionEngine):
             # Set camera properties
             self._capture.set(cv2.CAP_PROP_FPS, self.fps)
             self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            self._apply_best_resolution()
 
             # Get actual camera properties
             actual_fps = self._capture.get(cv2.CAP_PROP_FPS)
@@ -161,6 +170,57 @@ class MediaPipeVisionEngine(VisionEngine):
         except Exception as e:
             logger.error(f"Failed to initialize Vision Engine: {e}", exc_info=True)
             return False
+
+    @staticmethod
+    def select_best_camera_id(max_id: int = 6) -> Optional[int]:
+        """Select the best available camera ID by probing resolution."""
+        backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
+        best_id = None
+        best_area = 0
+
+        for cam_id in range(max_id):
+            cap = cv2.VideoCapture(cam_id, backend)
+            if not cap.isOpened():
+                cap.release()
+                continue
+
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            area = width * height
+
+            if area > best_area:
+                best_area = area
+                best_id = cam_id
+
+            cap.release()
+
+        return best_id
+
+    def _apply_best_resolution(self) -> None:
+        """Attempt to set the highest usable camera resolution."""
+        if not self._capture:
+            return
+
+        preferred = [(1920, 1080), (1280, 720), (960, 540), (640, 480)]
+        best_width = 0
+        best_height = 0
+
+        for width, height in preferred:
+            self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            time.sleep(0.02)
+            actual_width = int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_height = int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            if actual_width * actual_height > best_width * best_height:
+                best_width = actual_width
+                best_height = actual_height
+
+        if best_width > 0 and best_height > 0:
+            self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, best_width)
+            self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, best_height)
 
     def start_capture(self) -> None:
         """Start the frame capture and processing thread."""

@@ -25,6 +25,8 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QGroupBox,
     QFrame,
+    QDialog,
+    QScrollArea,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, pyqtSlot, QTimer
 from PyQt6.QtGui import QImage, QPixmap, QFont
@@ -401,6 +403,63 @@ class ControlsPanel(QGroupBox):
 
         self.setLayout(layout)
 
+
+class GestureGuideDialog(QDialog):
+    """Dialog that lists available gestures and their mappings."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Gesture Guide")
+        self.setMinimumSize(520, 560)
+
+        layout = QVBoxLayout()
+
+        title = QLabel("Gesture Guide")
+        title.setStyleSheet("font-size: 18px; font-weight: 700; color: #2a231c;")
+        layout.addWidget(title)
+
+        subtitle = QLabel(
+            "Recognized gestures and recommended mappings for each mode."
+        )
+        subtitle.setStyleSheet("color: #6a5d4f;")
+        layout.addWidget(subtitle)
+
+        content = QLabel()
+        content.setTextFormat(Qt.TextFormat.RichText)
+        content.setWordWrap(True)
+        content.setText(
+            "<b>System</b><br/>"
+            "- Both palms open for 2 seconds: switch mode<br/><br/>"
+            "<b>Audio Control Mode</b><br/>"
+            "- Fist: play/pause<br/>"
+            "- Swipe right: next track<br/>"
+            "- Swipe left: previous track<br/>"
+            "- Pinch distance: volume (continuous)<br/>"
+            "- Open palm vertical position: tempo (stubbed)<br/>"
+            "- Open palm horizontal position: pitch (stubbed)<br/><br/>"
+            "<b>Image Editing Mode</b><br/>"
+            "- Pinch + drag: translate<br/>"
+            "- Two-hand spread: scale<br/>"
+            "- Circular motion: rotate<br/>"
+            "- Swipe left: undo<br/>"
+            "- Open palm vertical position: brightness<br/><br/>"
+            "<b>Recognized Gestures</b><br/>"
+            "- open_palm, fist, pinch, two_fingers, three_fingers<br/>"
+            "- swipe_left, swipe_right, vertical_motion, circular_motion, two_hand_spread"
+        )
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout()
+        scroll_layout.addWidget(content)
+        scroll_layout.addStretch()
+        scroll_content.setLayout(scroll_layout)
+        scroll.setWidget(scroll_content)
+        layout.addWidget(scroll)
+
+        self.setLayout(layout)
+
     def _on_debug_clicked(self, checked: bool):
         """Handle debug button click."""
         self.debug_toggled.emit(checked)
@@ -482,6 +541,37 @@ class PyQt6MainWindow(QMainWindow):
         self.setWindowTitle("Gesture Media Interface - PyQt6")
         self.setGeometry(100, 100, 1200, 700)
 
+        self._setup_menu()
+
+        self.setStyleSheet(
+            "QMainWindow { background-color: #f5f1e8; }"
+            "QWidget { color: #1d1d1f; font-family: 'Trebuchet MS'; }"
+            "QGroupBox {"
+            "  border: 1px solid #d4c7b5;"
+            "  border-radius: 10px;"
+            "  margin-top: 12px;"
+            "  background-color: #fff8ef;"
+            "}"
+            "QGroupBox::title {"
+            "  subcontrol-origin: margin;"
+            "  subcontrol-position: top left;"
+            "  padding: 2px 8px;"
+            "  color: #4e3d2c;"
+            "  font-weight: 600;"
+            "}"
+            "QPushButton {"
+            "  background-color: #2f7b6d;"
+            "  color: #ffffff;"
+            "  border-radius: 8px;"
+            "  padding: 8px 12px;"
+            "  font-weight: 600;"
+            "}"
+            "QPushButton:checked { background-color: #1f5c52; }"
+            "QPushButton:hover { background-color: #3f8b7a; }"
+            "QLabel#AppTitle { font-size: 20px; font-weight: 700; color: #2a231c; }"
+            "QLabel#AppSubtitle { font-size: 11px; color: #6a5d4f; }"
+        )
+
         # Create central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -493,12 +583,30 @@ class PyQt6MainWindow(QMainWindow):
 
         # Left Panel - Camera Feed
         self.camera_widget = CameraWidget()
+        self.camera_widget.setStyleSheet(
+            "QLabel { background-color: #0c0c0c; border: 2px solid #d4c7b5;"
+            " border-radius: 12px; }"
+        )
         main_layout.addWidget(self.camera_widget, stretch=2)
 
         # Right Panel - Status and Controls
         right_panel = QWidget()
         right_layout = QVBoxLayout()
         right_layout.setSpacing(10)
+
+        # Header
+        header_widget = QWidget()
+        header_layout = QVBoxLayout()
+        header_layout.setSpacing(2)
+        header_layout.setContentsMargins(2, 2, 2, 2)
+        title = QLabel("Gesture Media Interface")
+        title.setObjectName("AppTitle")
+        subtitle = QLabel("Live hand-tracking control surface")
+        subtitle.setObjectName("AppSubtitle")
+        header_layout.addWidget(title)
+        header_layout.addWidget(subtitle)
+        header_widget.setLayout(header_layout)
+        right_layout.addWidget(header_widget)
 
         # Status Panel
         self.status_panel = StatusPanel()
@@ -519,6 +627,17 @@ class PyQt6MainWindow(QMainWindow):
         main_layout.addWidget(right_panel, stretch=1)
 
         central_widget.setLayout(main_layout)
+
+    def _setup_menu(self):
+        """Setup the menu bar and actions."""
+        help_menu = self.menuBar().addMenu("Help")
+        gesture_action = help_menu.addAction("Gesture Guide")
+        gesture_action.triggered.connect(self._show_gesture_guide)
+
+    def _show_gesture_guide(self):
+        """Show the gesture guide dialog."""
+        dialog = GestureGuideDialog(self)
+        dialog.exec()
 
     def start_vision_engine(self):
         """Start the vision engine and worker thread."""
@@ -887,7 +1006,7 @@ class PyQt6UI(AppUI):
             if not self.vision_engine:
                 logger.info("Creating default VisionEngine")
                 self.vision_engine = MediaPipeVisionEngine(
-                    camera_id=0,
+                    camera_id=-1,
                     fps=30,
                     max_queue_size=2,
                     enable_smoothing=True,
