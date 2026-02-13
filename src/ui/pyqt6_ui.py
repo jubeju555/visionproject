@@ -403,6 +403,21 @@ class ControlsPanel(QGroupBox):
 
         self.setLayout(layout)
 
+    def _on_debug_clicked(self, checked: bool):
+        """Handle debug button click."""
+        self.debug_toggled.emit(checked)
+        self.status_label.setText(f"Debug Mode: {'ON' if checked else 'OFF'}")
+
+    def _on_smoothing_clicked(self, checked: bool):
+        """Handle smoothing button click."""
+        self.smoothing_toggled.emit(checked)
+        self.status_label.setText(f"Smoothing: {'ON' if checked else 'OFF'}")
+
+    def _on_reset_clicked(self):
+        """Handle reset button click."""
+        self.reset_requested.emit()
+        self.status_label.setText("System Reset")
+
 
 class GestureGuideDialog(QDialog):
     """Dialog that lists available gestures and their mappings."""
