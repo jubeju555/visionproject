@@ -13,23 +13,12 @@ from typing import Optional
 
 # Import core interfaces and implementations
 from src.core import (
-    VisionEngine,
-    GestureEngine,
-    ModeRouter,
-    AudioController,
-    ImageEditor,
     AppUI,
-    StateManager,
-    ApplicationMode,
     PerformanceMonitor,
     get_shutdown_handler,
     register_cleanup,
 )
-from src.vision import CameraCapture
-from src.gesture import HandTracker
-from src.audio import AudioPlayer
-from src.image import ImageManipulator
-from src.ui import UIRenderer
+from src.ui import PyQt6UI
 
 
 # Configure logging
@@ -60,11 +49,6 @@ class GestureMediaInterface:
         self.shutdown_handler = get_shutdown_handler()
         
         # Initialize subsystem components
-        self.vision_engine: Optional[VisionEngine] = None
-        self.gesture_engine: Optional[GestureEngine] = None
-        self.mode_router: Optional[ModeRouter] = None
-        self.audio_controller: Optional[AudioController] = None
-        self.image_editor: Optional[ImageEditor] = None
         self.ui: Optional[AppUI] = None
         
         self._running = False
@@ -77,48 +61,14 @@ class GestureMediaInterface:
             bool: True if all subsystems initialized successfully
         """
         try:
-            # Create subsystem instances
-            logger.info("Creating subsystem instances...")
-            self.vision_engine = CameraCapture(camera_id=0)
-            self.gesture_engine = HandTracker()
-            self.mode_router = StateManager()
-            self.audio_controller = AudioPlayer()
-            self.image_editor = ImageManipulator()
-            self.ui = UIRenderer(window_name="Gesture Media Interface")
-            
-            # Initialize each subsystem
-            logger.info("Initializing vision engine...")
-            if not self.vision_engine.initialize():
-                logger.error("Failed to initialize vision engine")
-                return False
-            
-            logger.info("Initializing gesture engine...")
-            if not self.gesture_engine.initialize():
-                logger.error("Failed to initialize gesture engine")
-                return False
-            
-            logger.info("Initializing mode router...")
-            if not self.mode_router.initialize():
-                logger.error("Failed to initialize mode router")
-                return False
-            
-            logger.info("Initializing audio controller...")
-            if not self.audio_controller.initialize():
-                logger.error("Failed to initialize audio controller")
-                return False
-            
-            logger.info("Initializing image editor...")
-            if not self.image_editor.initialize():
-                logger.error("Failed to initialize image editor")
-                return False
-            
+            # Create UI (manages vision, gesture recognition, and mode router internally)
+            logger.info("Creating UI...")
+            self.ui = PyQt6UI(performance_monitor=self.performance_monitor)
+
             logger.info("Initializing UI...")
             if not self.ui.initialize():
                 logger.error("Failed to initialize UI")
                 return False
-            
-            # Register gesture handlers (placeholder for now)
-            self._register_handlers()
             
             logger.info("All subsystems initialized successfully")
             return True
@@ -126,21 +76,6 @@ class GestureMediaInterface:
         except Exception as e:
             logger.error(f"Error during initialization: {e}", exc_info=True)
             return False
-    
-    def _register_handlers(self) -> None:
-        """
-        Register gesture handlers for each mode.
-        
-        This method sets up the mapping between gestures and actions
-        for different application modes.
-        """
-        # TODO: Implement gesture handler registration
-        # This is where we would register handlers like:
-        # self.mode_router.register_handler(ApplicationMode.AUDIO, "play", self._handle_play)
-        # self.mode_router.register_handler(ApplicationMode.AUDIO, "pause", self._handle_pause)
-        # etc.
-        logger.info("Gesture handlers registration (placeholder)")
-        pass
     
     def run(self) -> None:
         """
@@ -157,22 +92,8 @@ class GestureMediaInterface:
         self._running = True
         
         try:
-            # Start frame capture
-            if self.vision_engine:
-                self.vision_engine.start_capture()
-            
-            # Main loop (placeholder - actual implementation will come later)
-            while self._running:
-                # TODO: Implement main processing loop
-                # 1. Get frame from vision engine
-                # 2. Process frame with gesture engine
-                # 3. Route gesture through mode router
-                # 4. Process events
-                # 5. Render UI
-                # 6. Handle user input
-                
-                # For now, just a placeholder
-                pass
+            if self.ui:
+                self.ui.run()
                 
         except KeyboardInterrupt:
             logger.info("Application interrupted by user")
@@ -190,26 +111,6 @@ class GestureMediaInterface:
         if self.ui:
             logger.info("Cleaning up UI...")
             self.ui.cleanup()
-        
-        if self.image_editor:
-            logger.info("Cleaning up image editor...")
-            self.image_editor.cleanup()
-        
-        if self.audio_controller:
-            logger.info("Cleaning up audio controller...")
-            self.audio_controller.cleanup()
-        
-        if self.mode_router:
-            logger.info("Cleaning up mode router...")
-            self.mode_router.cleanup()
-        
-        if self.gesture_engine:
-            logger.info("Cleaning up gesture engine...")
-            self.gesture_engine.cleanup()
-        
-        if self.vision_engine:
-            logger.info("Cleaning up vision engine...")
-            self.vision_engine.cleanup()
         
         # Log performance summary
         if self.performance_monitor:
