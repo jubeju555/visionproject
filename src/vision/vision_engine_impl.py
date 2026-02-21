@@ -146,8 +146,10 @@ class MediaPipeVisionEngine(VisionEngine):
             )
 
             # Initialize camera
-            backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
-            self._capture = cv2.VideoCapture(self.camera_id, backend)
+            if os.name == "nt":
+                self._capture = cv2.VideoCapture(self.camera_id, cv2.CAP_DSHOW)
+            else:
+                self._capture = cv2.VideoCapture(self.camera_id)
             if not self._capture.isOpened():
                 logger.error(f"Failed to open camera {self.camera_id}")
                 return False

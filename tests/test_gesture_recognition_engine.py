@@ -360,8 +360,31 @@ class TestGestureRecognitionEngine:
         # Start engine
         engine.start()
         
-        # Create open palm landmarks
-        landmarks_normalized = [{'x': 0.5, 'y': 0.5 - i * 0.05, 'z': 0.0} for i in range(21)]
+        # Create realistic open palm landmarks
+        # Wrist at (0.5, 0.5), fingers extending upward and outward
+        landmarks_normalized = [
+            {'x': 0.5, 'y': 0.5, 'z': 0.0},    # 0: wrist
+            {'x': 0.4, 'y': 0.45, 'z': 0.0},   # 1: thumb CMC
+            {'x': 0.35, 'y': 0.35, 'z': 0.0},  # 2: thumb MCP
+            {'x': 0.3, 'y': 0.25, 'z': 0.0},   # 3: thumb IP
+            {'x': 0.25, 'y': 0.15, 'z': 0.0},  # 4: thumb tip
+            {'x': 0.55, 'y': 0.45, 'z': 0.0},  # 5: index CMC
+            {'x': 0.6, 'y': 0.3, 'z': 0.0},    # 6: index PIP
+            {'x': 0.62, 'y': 0.15, 'z': 0.0},  # 7: index DIP
+            {'x': 0.63, 'y': 0.0, 'z': 0.0},   # 8: index tip (extended high)
+            {'x': 0.5, 'y': 0.4, 'z': 0.0},    # 9: middle CMC
+            {'x': 0.5, 'y': 0.25, 'z': 0.0},   # 10: middle PIP
+            {'x': 0.5, 'y': 0.1, 'z': 0.0},    # 11: middle DIP
+            {'x': 0.5, 'y': -0.05, 'z': 0.0},  # 12: middle tip (extended highest)
+            {'x': 0.45, 'y': 0.4, 'z': 0.0},   # 13: ring CMC
+            {'x': 0.42, 'y': 0.25, 'z': 0.0},  # 14: ring PIP
+            {'x': 0.4, 'y': 0.1, 'z': 0.0},    # 15: ring DIP
+            {'x': 0.38, 'y': -0.05, 'z': 0.0}, # 16: ring tip
+            {'x': 0.4, 'y': 0.35, 'z': 0.0},   # 17: pinky CMC
+            {'x': 0.36, 'y': 0.2, 'z': 0.0},   # 18: pinky PIP
+            {'x': 0.34, 'y': 0.05, 'z': 0.0},  # 19: pinky DIP
+            {'x': 0.32, 'y': -0.05, 'z': 0.0}, # 20: pinky tip
+        ]
         hand_data = {
             'handedness': 'Right',
             'landmarks_normalized': landmarks_normalized,
