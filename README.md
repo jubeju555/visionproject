@@ -101,9 +101,114 @@ gesture-media-interface/
 │   └── ... (module summaries)
 └── screenshots/               # Captured images
 
+## Getting Started
+
+### Prerequisites
+
+- Python 3.9+
+- Webcam
+- Linux/macOS/Windows
+
+### Installation
+
+1. **Clone the repository**
+```bash
+cd /path/to/project
+```
+
+2. **Create virtual environment**
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# .venv\Scripts\activate   # Windows
+```
+
+3. **Install dependencies**
+```bash
+pip install -r requirements.txt
+```
+
+4. **Run the application**
 ```bash
 python main.py
-````
+```
+
+## Usage
+
+### Camera Mode (Default)
+
+The application starts in **Camera Mode** with real-time hand tracking:
+
+1. Hold your hand in front of the camera
+2. MediaPipe will detect and track your hand landmarks
+3. Green lines show the tracked hand skeleton
+4. FPS counter displays in the top-left corner
+
+### Capturing Screenshots
+
+To capture a perspective-corrected screenshot:
+
+1. **Form a rectangle** with both hands:
+   - Use your **thumb** and **index finger** on each hand
+   - Create 4 corners of a rectangle in the air
+   - The system detects when corners are aligned
+
+2. **Confirm capture**:
+   - Rectangle turns **GREEN** when aligned properly
+   - Hold steady for **1 second** to confirm
+   - Progress indicator shows capture countdown
+
+3. **Editing Mode activates**:
+   - Camera feed **pauses** (screenshot frozen)
+   - Editing panel appears on the right
+   - All editing tools are now available
+
+### Image Editing Mode
+
+Once in Editing Mode, use the tools panel:
+
+#### Available Tools
+
+- **Brightness**: Adjust image brightness (-100 to +100)
+- **Contrast**: Adjust image contrast (0.5x to 2.0x)
+- **Saturation**: Adjust color intensity (0.0 to 2.0)
+- **Rotation**: Rotate image (0° to 360°)
+- **Gaussian Blur**: Apply blur effect (0 to 10)
+- **Sharpen**: Enhance edge details (0.0 to 2.0)
+
+#### Editing Controls
+
+- **Apply**: Save current adjustments
+- **Reset**: Revert all sliders to default
+- **Undo**: Step back through history (Ctrl+Z)
+- **Redo**: Step forward through history (Ctrl+Shift+Z)
+- **Save**: Export edited image to `screenshots/` folder
+- **Exit Editing**: Return to camera mode
+
+#### Filters
+
+Apply one-click filters:
+- Grayscale
+- Sepia
+- Invert
+- Edge Detect
+
+### Keyboard Shortcuts
+
+- **Ctrl+Z**: Undo last edit
+- **Ctrl+Shift+Z**: Redo last undo
+- **R**: Reset all adjustments
+- **S**: Save current image
+- **Esc**: Exit editing mode (return to camera)
+- **Q**: Quit application
+
+### Tips for Best Results
+
+✅ **Good lighting**: Ensure hands are well-lit for accurate tracking
+✅ **Steady hands**: Hold rectangle steady for 1 second to confirm capture
+✅ **Clear background**: Avoid cluttered backgrounds for better detection
+✅ **Proper distance**: Keep hands 1-2 feet from camera
+✅ **Flat surface**: Capture flat documents/screens for best perspective correction
 
 ## Features
 
@@ -225,3 +330,4 @@ TBD
 ## Contributors
 
 TBD
+````
