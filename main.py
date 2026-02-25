@@ -5,39 +5,11 @@ Main entry point for Gesture Media Interface application.
 This module initializes and wires together all components of the
 gesture-controlled multimedia system with performance monitoring
 and graceful shutdown.
-
-Environment Variables:
-    GESTURE_HEADLESS: Set to 1 to run in headless mode (no GUI, for testing)
-    DISPLAY: X11 display server; if not set, assumes headless mode
 """
 
 import sys
 import logging
-import os
 from typing import Optional
-
-# Detect headless/display environment EARLY
-# Set this before any Qt imports to prevent plugin loading errors
-def _setup_display_mode():
-    """Set up display mode before importing PyQt6."""
-    # Check explicit headless flag
-    if os.environ.get('GESTURE_HEADLESS', '0') == '1':
-        os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-        return True
-    
-    # Check if DISPLAY is available (X11)
-    if not os.environ.get('DISPLAY'):
-        # No X11 display, check for Wayland
-        if not os.environ.get('WAYLAND_DISPLAY'):
-            # No display server at all - force offscreen
-            os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-            os.environ['GESTURE_HEADLESS'] = '1'
-            return True
-    
-    return False
-
-# Run display detection BEFORE other imports
-_is_headless = _setup_display_mode()
 
 # Import core interfaces and implementations
 from src.core import (
@@ -89,21 +61,6 @@ class GestureMediaInterface:
             bool: True if all subsystems initialized successfully
         """
         try:
-            # Check for headless mode
-            if os.environ.get('GESTURE_HEADLESS', '0') == '1':
-                logger.warning("="*70)
-                logger.warning("Running in HEADLESS MODE (no display server)")
-                logger.warning("="*70)
-                logger.info("Application initialized successfully in headless mode")
-                logger.info("All core subsystems are functional for testing")
-                logger.info("")
-                logger.info("To run with GUI, connect to a system with:")
-                logger.info("  • X11 display server (DISPLAY variable set)")
-                logger.info("  • Wayland display server (WAYLAND_DISPLAY variable set)")
-                logger.info("")
-                logger.warning("="*70)
-                return True
-            
             # Create UI (manages vision, gesture recognition, and mode router internally)
             logger.info("Creating UI...")
             self.ui = PyQt6UI(performance_monitor=self.performance_monitor)
@@ -117,20 +74,8 @@ class GestureMediaInterface:
             return True
             
         except Exception as e:
-            # Check if it's a display-related error
-            error_str = str(e)
-            if any(x in error_str for x in ['platform plugin', 'QXcb', 'xcb-cursor', 'display', 'Display']):
-                logger.warning("="*70)
-                logger.warning("Display server not available (headless environment)")
-                logger.warning("="*70)
-                logger.info("Application running in emergency headless mode")
-                logger.info("Set GESTURE_HEADLESS=1 to suppress this warning")
-                logger.warning("="*70)
-                os.environ['GESTURE_HEADLESS'] = '1'
-                return True
-            else:
-                logger.error(f"Error during initialization: {e}", exc_info=True)
-                return False
+            logger.error(f"Error during initialization: {e}", exc_info=True)
+            return False
     
     def run(self) -> None:
         """
@@ -147,17 +92,7 @@ class GestureMediaInterface:
         self._running = True
         
         try:
-            # Headless mode - just keep running for a moment then exit
-            if os.environ.get('GESTURE_HEADLESS', '0') == '1':
-                logger.info("Headless mode: Application is ready for testing")
-                logger.info("Press Ctrl+C to exit")
-                import time
-                try:
-                    while self._running:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    logger.info("Application interrupted by user")
-            elif self.ui:
+            if self.ui:
                 self.ui.run()
                 
         except KeyboardInterrupt:
