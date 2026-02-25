@@ -99,19 +99,23 @@ class RectangleGestureDetector:
         Returns:
             RectangleFrame if rectangle detected, None otherwise
         """
-        # Need at least 2 hands to form a rectangle
-        if len(landmarks) < 2:
+        if not landmarks:
             self._prev_rectangle = None
             return None
         
         # Try both single-hand and two-hand rectangle formations
-        rectangle = self._detect_two_hand_rectangle(landmarks, timestamp)
-        if rectangle:
-            self._prev_rectangle = rectangle
-            return rectangle
-        
+        if len(landmarks) >= 2:
+            rectangle = self._detect_two_hand_rectangle(landmarks, timestamp)
+            if rectangle:
+                self._prev_rectangle = rectangle
+                return rectangle
+
         # Single hand rectangle (thumb and index fingers)
-        rectangle = self._detect_single_hand_rectangle(landmarks[0], landmarks[0].get('handedness', 'Unknown'), timestamp)
+        rectangle = self._detect_single_hand_rectangle(
+            landmarks[0],
+            landmarks[0].get('handedness', 'Unknown'),
+            timestamp,
+        )
         if rectangle:
             self._prev_rectangle = rectangle
             return rectangle
@@ -242,7 +246,6 @@ class RectangleGestureDetector:
                 return None
             
             # Sort corners: top_left, top_right, bottom_right, bottom_left
-            box = np.int32(box)
             box = sorted(box.tolist(), key=lambda p: (p[1], p[0]))  # Sort by y, then x
             
             top_points = box[:2]

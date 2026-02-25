@@ -10,6 +10,7 @@ This module provides a modern, thread-safe UI using PyQt6 with:
 """
 
 import logging
+import os
 import time
 from typing import Optional, Dict, Any, List
 import numpy as np
@@ -36,6 +37,11 @@ from src.vision.vision_engine_impl import MediaPipeVisionEngine, VisionData
 from src.gesture.gesture_recognition_engine import (
     GestureRecognitionEngine,
     GestureEvent,
+)
+from src.gesture.rectangle_gestures import (
+    RectangleGestureDetector,
+    RectangleFrame,
+    ScreenshotCapture,
 )
 from src.core.state_manager import StateManager
 from src.core.mode_router import ApplicationMode
@@ -344,6 +350,10 @@ class StatusPanel(QGroupBox):
     def update_hands(self, count: int):
         """Update hands detected count."""
         self.hands_value.setText(str(count))
+
+    def update_image_status(self, status: str):
+        """Update image editing status display."""
+        self.image_status.setText(status)
     
     def update_performance_metrics(self, e2e_latency: float, dropped_frames: int, queue_status: str):
         """Update performance metrics display."""
@@ -445,6 +455,9 @@ class GestureGuideDialog(QDialog):
         content.setText(
             "<b>System</b><br/>"
             "- Both palms open for 2 seconds: switch mode<br/><br/>"
+            "- Rectangle frame visible: ready to capture<br/>"
+            "- Snap (pinch) with either hand: capture screenshot<br/>"
+            "- Double pinch (both hands within 0.35s): capture screenshot<br/><br/>"
             "<b>Audio Control Mode</b><br/>"
             "- Fist: play/pause<br/>"
             "- Swipe right: next track<br/>"
@@ -541,6 +554,19 @@ class PyQt6MainWindow(QMainWindow):
         # Latest gesture
         self.latest_gesture: Optional[str] = None
         self.latest_gesture_confidence: float = 0.0
+
+        # Rectangle capture state
+        self.rectangle_detector = RectangleGestureDetector()
+        self.screenshot_capture = ScreenshotCapture(output_dir="./screenshots")
+        self.latest_rectangle: Optional[RectangleFrame] = None
+        self.latest_frame: Optional[np.ndarray] = None
+        self.last_capture_time = 0.0
+        self.capture_cooldown = 1.0
+        self.last_pinch_time = {"left": 0.0, "right": 0.0}
+        self.double_pinch_window = 0.35
+        self.pending_snap = False
+        self.pending_snap_hand: Optional[str] = None
+        self.pending_snap_time = 0.0
         
         # Performance metrics update timer
         if self.performance_monitor:
@@ -559,32 +585,32 @@ class PyQt6MainWindow(QMainWindow):
         self._setup_menu()
 
         self.setStyleSheet(
-            "QMainWindow { background-color: #f5f1e8; }"
-            "QWidget { color: #1d1d1f; font-family: 'Trebuchet MS'; }"
+            "QMainWindow { background-color: #0f172a; }"
+            "QWidget { color: #e2e8f0; font-family: 'Poppins', 'Segoe UI', 'Trebuchet MS'; }"
             "QGroupBox {"
-            "  border: 1px solid #d4c7b5;"
-            "  border-radius: 10px;"
-            "  margin-top: 12px;"
-            "  background-color: #fff8ef;"
+            "  border: 1px solid #1f2a44;"
+            "  border-radius: 14px;"
+            "  margin-top: 14px;"
+            "  background-color: #111827;"
             "}"
             "QGroupBox::title {"
             "  subcontrol-origin: margin;"
             "  subcontrol-position: top left;"
-            "  padding: 2px 8px;"
-            "  color: #4e3d2c;"
+            "  padding: 2px 10px;"
+            "  color: #94a3b8;"
             "  font-weight: 600;"
             "}"
             "QPushButton {"
-            "  background-color: #2f7b6d;"
+            "  background-color: #2563eb;"
             "  color: #ffffff;"
-            "  border-radius: 8px;"
-            "  padding: 8px 12px;"
+            "  border-radius: 10px;"
+            "  padding: 9px 14px;"
             "  font-weight: 600;"
             "}"
-            "QPushButton:checked { background-color: #1f5c52; }"
-            "QPushButton:hover { background-color: #3f8b7a; }"
-            "QLabel#AppTitle { font-size: 20px; font-weight: 700; color: #2a231c; }"
-            "QLabel#AppSubtitle { font-size: 11px; color: #6a5d4f; }"
+            "QPushButton:checked { background-color: #1d4ed8; }"
+            "QPushButton:hover { background-color: #3b82f6; }"
+            "QLabel#AppTitle { font-size: 20px; font-weight: 700; color: #f8fafc; }"
+            "QLabel#AppSubtitle { font-size: 11px; color: #94a3b8; }"
         )
 
         # Create central widget
@@ -599,8 +625,8 @@ class PyQt6MainWindow(QMainWindow):
         # Left Panel - Camera Feed
         self.camera_widget = CameraWidget()
         self.camera_widget.setStyleSheet(
-            "QLabel { background-color: #0c0c0c; border: 2px solid #d4c7b5;"
-            " border-radius: 12px; }"
+            "QLabel { background-color: #0b1020; border: 2px solid #1f2937;"
+            " border-radius: 14px; }"
         )
         main_layout.addWidget(self.camera_widget, stretch=2)
 
@@ -723,9 +749,21 @@ class PyQt6MainWindow(QMainWindow):
             except (queue.Empty, queue.Full):
                 pass
         
+        # Keep latest raw frame for capture
+        self.latest_frame = vision_data.frame.copy()
+
         # Draw landmarks on frame
         frame = vision_data.frame.copy()
         frame = self._draw_landmarks(frame, vision_data.landmarks)
+
+        # Detect and draw rectangle overlay
+        timestamp = vision_data.timestamp or time.time()
+        self.latest_rectangle = self.rectangle_detector.detect_rectangle(
+            vision_data.landmarks,
+            timestamp,
+        )
+        if self.latest_rectangle:
+            frame = self._draw_rectangle_overlay(frame, self.latest_rectangle)
 
         # Display frame
         self.camera_widget.display_frame(frame)
@@ -845,6 +883,42 @@ class PyQt6MainWindow(QMainWindow):
 
         return frame
 
+    def _draw_rectangle_overlay(
+        self, frame: np.ndarray, rectangle: RectangleFrame
+    ) -> np.ndarray:
+        """Draw rectangle overlay on the frame."""
+        if rectangle is None:
+            return frame
+
+        height, width = frame.shape[:2]
+        corners = rectangle.get_pixel_coordinates(width, height)
+        points = np.array(
+            [
+                corners["top_left"],
+                corners["top_right"],
+                corners["bottom_right"],
+                corners["bottom_left"],
+            ],
+            dtype=np.int32,
+        )
+
+        color = (0, 200, 255) if not self.debug_mode else (255, 200, 0)
+        cv2.polylines(frame, [points], isClosed=True, color=color, thickness=2)
+
+        label = f"Rectangle {rectangle.confidence:.2f}"
+        label_pos = corners["top_left"]
+        cv2.putText(
+            frame,
+            label,
+            (label_pos[0], max(15, label_pos[1] - 10)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            color,
+            2,
+        )
+
+        return frame
+
     def _update_fps(self):
         """Update FPS calculation and display."""
         self.frame_count += 1
@@ -927,6 +1001,63 @@ class PyQt6MainWindow(QMainWindow):
         
         # Route gesture to mode router (non-blocking)
         self.mode_router.route_gesture(gesture_event.gesture_name, gesture_data)
+
+        # Capture screenshot when pinch is detected inside a rectangle frame
+        if gesture_event.gesture_name == "pinch":
+            self._handle_pinch_capture(gesture_event)
+
+    def _handle_pinch_capture(self, gesture_event: GestureEvent) -> None:
+        """Handle snap or double-pinch capture logic."""
+        if not self.latest_rectangle or self.latest_frame is None:
+            return
+
+        hand_id = gesture_event.hand_id
+        if hand_id not in ("left", "right"):
+            return
+
+        now = time.time()
+        other_hand = "right" if hand_id == "left" else "left"
+        other_pinch_time = self.last_pinch_time.get(other_hand, 0.0)
+        self.last_pinch_time[hand_id] = now
+
+        if now - other_pinch_time <= self.double_pinch_window:
+            self.pending_snap = False
+            self.pending_snap_hand = None
+            self._trigger_capture(reason="double pinch")
+            return
+
+        self.pending_snap = True
+        self.pending_snap_hand = hand_id
+        self.pending_snap_time = now
+
+        QTimer.singleShot(int(self.double_pinch_window * 1000), self._finalize_snap_capture)
+
+    def _finalize_snap_capture(self) -> None:
+        """Finalize single-hand snap capture after double-pinch window expires."""
+        if not self.pending_snap:
+            return
+
+        now = time.time()
+        if now - self.pending_snap_time >= self.double_pinch_window:
+            self._trigger_capture(reason="snap")
+        self.pending_snap = False
+        self.pending_snap_hand = None
+
+    def _trigger_capture(self, reason: str) -> None:
+        """Capture and save a screenshot if cooldown allows."""
+        now = time.time()
+        if (now - self.last_capture_time) < self.capture_cooldown:
+            return
+
+        saved_path = self.screenshot_capture.capture_and_save(
+            self.latest_frame,
+            self.latest_rectangle,
+            name_prefix="rectangle",
+        )
+        if saved_path:
+            self.last_capture_time = now
+            filename = os.path.basename(saved_path)
+            self.status_panel.update_image_status(f"Captured ({reason}): {filename}")
 
     @pyqtSlot(str)
     def _on_error(self, error_msg: str):
