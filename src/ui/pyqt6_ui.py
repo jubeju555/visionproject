@@ -28,6 +28,9 @@ from PyQt6.QtWidgets import (
     QFrame,
     QDialog,
     QScrollArea,
+    QSlider,
+    QSpinBox,
+    QDoubleSpinBox,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, pyqtSlot, QTimer
 from PyQt6.QtGui import QImage, QPixmap, QFont
@@ -43,6 +46,7 @@ from src.gesture.rectangle_gestures import (
     RectangleFrame,
     ScreenshotCapture,
 )
+from src.image.editor import ImageManipulator
 from src.core.state_manager import StateManager
 from src.core.mode_router import ApplicationMode
 import queue
@@ -429,6 +433,148 @@ class ControlsPanel(QGroupBox):
         self.status_label.setText("System Reset")
 
 
+class EditingToolsPanel(QGroupBox):
+    """
+    Advanced image editing tools panel.
+    
+    Provides sliders and controls for:
+    - Brightness/Contrast
+    - Blur/Sharpen
+    - Rotation/Scale
+    - Filters (grayscale, sepia, etc)
+    """
+
+    # Signals for editing operations
+    brightness_changed = pyqtSignal(float)
+    contrast_changed = pyqtSignal(float)
+    blur_changed = pyqtSignal(float)
+    sharpen_changed = pyqtSignal(float)
+    rotate_changed = pyqtSignal(float)
+    scale_changed = pyqtSignal(float)
+    filter_applied = pyqtSignal(str)
+    save_requested = pyqtSignal()
+    back_to_camera = pyqtSignal()
+    undo_requested = pyqtSignal()
+    redo_requested = pyqtSignal()
+
+    def __init__(self, parent=None):
+        """Initialize editing tools panel."""
+        super().__init__("Editing Tools", parent)
+
+        layout = QVBoxLayout()
+        layout.setSpacing(8)
+
+        label_font = QFont()
+        label_font.setPointSize(9)
+        label_font.setBold(True)
+
+        # Brightness slider
+        brightness_label = QLabel("Brightness")
+        brightness_label.setFont(label_font)
+        layout.addWidget(brightness_label)
+        self.brightness_slider = QSlider(Qt.Orientation.Horizontal)
+        self.brightness_slider.setRange(-100, 100)
+        self.brightness_slider.setValue(0)
+        self.brightness_slider.setTickInterval(10)
+        self.brightness_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.brightness_slider.sliderMoved.connect(lambda v: self.brightness_changed.emit(v / 100.0))
+        layout.addWidget(self.brightness_slider)
+
+        # Contrast slider
+        contrast_label = QLabel("Contrast")
+        contrast_label.setFont(label_font)
+        layout.addWidget(contrast_label)
+        self.contrast_slider = QSlider(Qt.Orientation.Horizontal)
+        self.contrast_slider.setRange(0, 300)
+        self.contrast_slider.setValue(100)
+        self.contrast_slider.setTickInterval(20)
+        self.contrast_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.contrast_slider.sliderMoved.connect(lambda v: self.contrast_changed.emit(v / 100.0))
+        layout.addWidget(self.contrast_slider)
+
+        # Blur slider
+        blur_label = QLabel("Blur")
+        blur_label.setFont(label_font)
+        layout.addWidget(blur_label)
+        self.blur_slider = QSlider(Qt.Orientation.Horizontal)
+        self.blur_slider.setRange(0, 50)
+        self.blur_slider.setValue(0)
+        self.blur_slider.setTickInterval(5)
+        self.blur_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.blur_slider.sliderMoved.connect(lambda v: self.blur_changed.emit(float(v)))
+        layout.addWidget(self.blur_slider)
+
+        # Sharpen slider
+        sharpen_label = QLabel("Sharpen")
+        sharpen_label.setFont(label_font)
+        layout.addWidget(sharpen_label)
+        self.sharpen_slider = QSlider(Qt.Orientation.Horizontal)
+        self.sharpen_slider.setRange(0, 50)
+        self.sharpen_slider.setValue(0)
+        self.sharpen_slider.setTickInterval(5)
+        self.sharpen_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.sharpen_slider.sliderMoved.connect(lambda v: self.sharpen_changed.emit(float(v)))
+        layout.addWidget(self.sharpen_slider)
+
+        # Separator
+        layout.addWidget(self._create_separator())
+
+        # Filter buttons
+        filter_label = QLabel("Filters")
+        filter_label.setFont(label_font)
+        layout.addWidget(filter_label)
+
+        filter_layout = QHBoxLayout()
+        for filter_name in ["Grayscale", "Sepia", "HSV Eq"]:
+            btn = QPushButton(filter_name)
+            btn.clicked.connect(lambda checked, name=filter_name: self.filter_applied.emit(name))
+            filter_layout.addWidget(btn)
+        layout.addLayout(filter_layout)
+
+        # Separator
+        layout.addWidget(self._create_separator())
+
+        # Action buttons
+        action_layout = QHBoxLayout()
+
+        undo_btn = QPushButton("↶ Undo")
+        undo_btn.clicked.connect(self.undo_requested.emit)
+        action_layout.addWidget(undo_btn)
+
+        redo_btn = QPushButton("↷ Redo")
+        redo_btn.clicked.connect(self.redo_requested.emit)
+        action_layout.addWidget(redo_btn)
+
+        layout.addLayout(action_layout)
+
+        # Save and Back buttons
+        save_layout = QHBoxLayout()
+
+        save_btn = QPushButton("💾 Save")
+        save_btn.setStyleSheet("QPushButton { background-color: #059669; }")
+        save_btn.clicked.connect(self.save_requested.emit)
+        save_layout.addWidget(save_btn)
+
+        back_btn = QPushButton("← Back to Camera")
+        back_btn.setStyleSheet("QPushButton { background-color: #7c3aed; }")
+        back_btn.clicked.connect(self.back_to_camera.emit)
+        save_layout.addWidget(back_btn)
+
+        layout.addLayout(save_layout)
+
+        # Add stretch
+        layout.addStretch()
+
+        self.setLayout(layout)
+
+    def _create_separator(self):
+        """Create a horizontal separator line."""
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Sunken)
+        return separator
+
+
 class GestureGuideDialog(QDialog):
     """Dialog that lists available gestures and their mappings."""
 
@@ -568,6 +714,12 @@ class PyQt6MainWindow(QMainWindow):
         self.pending_snap_hand: Optional[str] = None
         self.pending_snap_time = 0.0
         
+        # Image editor state
+        self.image_editor = ImageManipulator()
+        self.image_editor.initialize()
+        self.editing_mode = False
+        self.current_edited_image: Optional[np.ndarray] = None
+        
         # Performance metrics update timer
         if self.performance_monitor:
             self.perf_timer = QTimer()
@@ -658,6 +810,22 @@ class PyQt6MainWindow(QMainWindow):
         # Controls Panel
         self.controls_panel = ControlsPanel()
         right_layout.addWidget(self.controls_panel)
+
+        # Editing Tools Panel (hidden by default)
+        self.editing_tools_panel = EditingToolsPanel()
+        self.editing_tools_panel.hide()
+        right_layout.addWidget(self.editing_tools_panel)
+        
+        # Connect editing signals
+        self.editing_tools_panel.brightness_changed.connect(self._on_brightness_changed)
+        self.editing_tools_panel.contrast_changed.connect(self._on_contrast_changed)
+        self.editing_tools_panel.blur_changed.connect(self._on_blur_apply)
+        self.editing_tools_panel.sharpen_changed.connect(self._on_sharpen_apply)
+        self.editing_tools_panel.filter_applied.connect(self._on_filter_apply)
+        self.editing_tools_panel.save_requested.connect(self._on_save_edited_image)
+        self.editing_tools_panel.back_to_camera.connect(self._on_back_to_camera)
+        self.editing_tools_panel.undo_requested.connect(self._on_undo)
+        self.editing_tools_panel.redo_requested.connect(self._on_redo)
 
         # Connect control signals
         self.controls_panel.debug_toggled.connect(self._on_debug_toggled)
@@ -1058,6 +1226,9 @@ class PyQt6MainWindow(QMainWindow):
             self.last_capture_time = now
             filename = os.path.basename(saved_path)
             self.status_panel.update_image_status(f"Captured ({reason}): {filename}")
+            
+            # Load captured image into editor and switch to editing mode
+            self._enter_editing_mode(saved_path)
 
     @pyqtSlot(str)
     def _on_error(self, error_msg: str):
@@ -1096,6 +1267,94 @@ class PyQt6MainWindow(QMainWindow):
         logger.info(f"Mode changed to: {new_mode.value}")
         # Update UI to show new mode (use QTimer to ensure UI thread safety)
         QTimer.singleShot(0, lambda: self.status_panel.update_mode(new_mode.value.upper()))
+
+    def _enter_editing_mode(self, image_path: str) -> None:
+        """Switch to image editing mode."""
+        if not self.image_editor.load_image(image_path):
+            logger.error(f"Failed to load image for editing: {image_path}")
+            return
+        
+        self.editing_mode = True
+        self.controls_panel.hide()
+        self.editing_tools_panel.show()
+        
+        # Display the edited image
+        self._update_editing_display()
+        
+        # Update status
+        self.status_panel.update_image_status(f"Editing: {os.path.basename(image_path)}")
+        logger.info(f"Entered editing mode with {image_path}")
+
+    def _exit_editing_mode(self) -> None:
+        """Switch back to camera mode."""
+        self.editing_mode = False
+        self.controls_panel.show()
+        self.editing_tools_panel.hide()
+        self.status_panel.update_image_status("Not Active")
+        logger.info("Exited editing mode")
+
+    def _update_editing_display(self) -> None:
+        """Update camera widget with edited image."""
+        img = self.image_editor.get_image()
+        if img is not None:
+            self.camera_widget.display_frame(img)
+
+    def _on_brightness_changed(self, value: float) -> None:
+        """Handle brightness adjust."""
+        self.image_editor.adjust_brightness(value)
+        self._update_editing_display()
+
+    def _on_contrast_changed(self, value: float) -> None:
+        """Handle contrast adjust."""
+        self.image_editor.adjust_contrast(value)
+        self._update_editing_display()
+
+    def _on_blur_apply(self, strength: float) -> None:
+        """Apply blur filter."""
+        if int(strength) > 0:
+            self.image_editor.apply_filter("blur", strength=int(strength))
+            self._update_editing_display()
+
+    def _on_sharpen_apply(self, strength: float) -> None:
+        """Apply sharpen filter."""
+        if int(strength) > 0:
+            self.image_editor.apply_filter("sharpen", strength=int(strength))
+            self._update_editing_display()
+
+    def _on_filter_apply(self, filter_name: str) -> None:
+        """Apply named filter."""
+        filter_map = {
+            "Grayscale": "grayscale",
+            "Sepia": "sepia",
+            "HSV Eq": "histogram_eq",
+        }
+        filter_key = filter_map.get(filter_name)
+        if filter_key:
+            self.image_editor.apply_filter(filter_key)
+            self._update_editing_display()
+            logger.info(f"Applied filter: {filter_name}")
+
+    def _on_save_edited_image(self) -> None:
+        """Save edited image."""
+        filename = f"edited_{time.strftime('%Y%m%d_%H%M%S')}.png"
+        filepath = os.path.join("./screenshots", filename)
+        if self.image_editor.save_image(filepath):
+            self.status_panel.update_image_status(f"Saved: {filename}")
+            logger.info(f"Saved edited image to {filepath}")
+
+    def _on_back_to_camera(self) -> None:
+        """Return to camera mode."""
+        self._exit_editing_mode()
+
+    def _on_undo(self) -> None:
+        """Undo last edit."""
+        self.image_editor.undo()
+        self._update_editing_display()
+
+    def _on_redo(self) -> None:
+        """Redo last undo."""
+        self.image_editor.redo()
+        self._update_editing_display()
 
     def closeEvent(self, event):
         """Handle window close event."""
