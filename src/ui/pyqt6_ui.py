@@ -460,6 +460,10 @@ class EditingToolsPanel(QGroupBox):
     def __init__(self, parent=None):
         """Initialize editing tools panel."""
         super().__init__("Editing Tools", parent)
+        
+        # Set minimum size to prevent squishing
+        self.setMinimumWidth(300)
+        self.setMinimumHeight(400)
 
         layout = QVBoxLayout()
         layout.setSpacing(8)
@@ -719,6 +723,7 @@ class PyQt6MainWindow(QMainWindow):
         self.image_editor.initialize()
         self.editing_mode = False
         self.current_edited_image: Optional[np.ndarray] = None
+        self.vision_updates_paused = False
         
         # Performance metrics update timer
         if self.performance_monitor:
@@ -811,10 +816,18 @@ class PyQt6MainWindow(QMainWindow):
         self.controls_panel = ControlsPanel()
         right_layout.addWidget(self.controls_panel)
 
-        # Editing Tools Panel (hidden by default)
+        # Editing Tools Panel (hidden by default, wrapped in scroll area)
         self.editing_tools_panel = EditingToolsPanel()
         self.editing_tools_panel.hide()
-        right_layout.addWidget(self.editing_tools_panel)
+        
+        # Wrap in scroll area to prevent squishing
+        self.editing_scroll = QScrollArea()
+        self.editing_scroll.setWidget(self.editing_tools_panel)
+        self.editing_scroll.setWidgetResizable(True)
+        self.editing_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.editing_scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        self.editing_scroll.hide()
+        right_layout.addWidget(self.editing_scroll)
         
         # Connect editing signals
         self.editing_tools_panel.brightness_changed.connect(self._on_brightness_changed)
@@ -906,6 +919,10 @@ class PyQt6MainWindow(QMainWindow):
         Args:
             vision_data: VisionData from VisionEngine
         """
+        # Skip updates if vision is paused (e.g., in editing mode)
+        if self.vision_updates_paused:
+            return
+            
         # Feed vision data to gesture engine
         try:
             self.vision_to_gesture_queue.put_nowait(vision_data)
@@ -1268,17 +1285,30 @@ class PyQt6MainWindow(QMainWindow):
         # Update UI to show new mode (use QTimer to ensure UI thread safety)
         QTimer.singleShot(0, lambda: self.status_panel.update_mode(new_mode.value.upper()))
 
+    def _pause_vision_updates(self) -> None:
+        """Pause vision feed updates (for editing mode)."""
+        self.vision_updates_paused = True
+        logger.info("Vision updates paused")
+
+    def _resume_vision_updates(self) -> None:
+        """Resume vision feed updates (return to camera mode)."""
+        self.vision_updates_paused = False
+        logger.info("Vision updates resumed")
+
     def _enter_editing_mode(self, image_path: str) -> None:
         """Switch to image editing mode."""
         if not self.image_editor.load_image(image_path):
             logger.error(f"Failed to load image for editing: {image_path}")
             return
         
+        # Pause vision engine to stop camera feed updates
+        self._pause_vision_updates()
+        
         self.editing_mode = True
         self.controls_panel.hide()
-        self.editing_tools_panel.show()
+        self.editing_scroll.show()  # Show scroll area containing editing panel
         
-        # Display the edited image
+        # Display the edited image (frozen)
         self._update_editing_display()
         
         # Update status
@@ -1289,8 +1319,12 @@ class PyQt6MainWindow(QMainWindow):
         """Switch back to camera mode."""
         self.editing_mode = False
         self.controls_panel.show()
-        self.editing_tools_panel.hide()
+        self.editing_scroll.hide()  # Hide scroll area containing editing panel
         self.status_panel.update_image_status("Not Active")
+        
+        # Resume vision engine updates
+        self._resume_vision_updates()
+        
         logger.info("Exited editing mode")
 
     def _update_editing_display(self) -> None:
